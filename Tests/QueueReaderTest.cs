@@ -14,7 +14,7 @@ namespace Tests
 	[TestFixture]
 	public class QueueReaderTest
 	{
-		[Test]
+		[Test, Explicit]
 		public void TestMsmq()
 		{
 			using (var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\MSMQ"))
@@ -56,7 +56,7 @@ namespace Tests
 
 
 		[Test]
-		public void T()
+		public void TestQueueReaderWithMockMsmq()
 		{
 			var actualMessage = new Message1{CorrelationId = "f3e608d4-96cf-4093-9923-91b13f4b7555"};
 			var messageQueueMock = new Mock<IMessageQueue>();
@@ -84,8 +84,8 @@ namespace Tests
 			messageQueueMock.Verify(m => m.BeginReceive(It.IsAny<TimeSpan>()), Times.Exactly(2));
 		}
 
-		[Test]
-		public void T2()
+		[Test, Explicit]
+		public void TestMsmqReader()
 		{
 			var queueName = @".\private$\Orders";
 			MessageQueue messageQueue;
@@ -101,8 +101,7 @@ namespace Tests
 			{
 				Message1 message;
 				EventWaitHandle waitHandle;
-				using (
-				var receiverReader = new MsmqReader<Message1>(new MessageQueueWrapper(messageQueue),
+				using (var receiverReader = new MsmqReader<Message1>(new MessageQueueWrapper(messageQueue),
 					message1 => (Message1) message1.Message.Body)
 					)
 				{

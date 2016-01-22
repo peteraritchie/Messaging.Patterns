@@ -17,6 +17,39 @@ namespace Tests
 		{
 			return;
 		}
+
+		[Test]
+		public void TranslatorResolverIsInvoked()
+		{
+			var bus = new Bus();
+			var calledCount = 0;
+			bus.AddResolver(() =>
+			{
+				calledCount++;
+				return new Pipe();
+			});
+			var directory = Path.GetDirectoryName(new Uri(GetType().Assembly.CodeBase).LocalPath);
+			bus.AddHandlersAndTranslators(directory, "Tests*.dll", "Tests.Mocks");
+
+			Assert.AreEqual(1, calledCount);
+		}
+
+		[Test]
+		public void HandlerResolverIsInvoked()
+		{
+			var bus = new Bus();
+			var calledCount = 0;
+			bus.AddResolver(() =>
+			{
+				calledCount++;
+				return new Message2Consumer();
+			});
+			var directory = Path.GetDirectoryName(new Uri(GetType().Assembly.CodeBase).LocalPath);
+			bus.AddHandlersAndTranslators(directory, "Tests*.dll", "Tests.Mocks");
+
+			Assert.AreEqual(1, calledCount);
+		}
+
 		[Test, Category("Performance")]
 		public void MeasurePerformance()
 		{

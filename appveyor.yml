@@ -1,0 +1,23 @@
+version: 1.0.{build}
+branches:
+  only:
+  - master
+configuration: Release
+assembly_info:
+  patch: true
+  file: '**\AssemblyInfo.*'
+  assembly_version: '{version}'
+  assembly_file_version: '{version}'
+  assembly_informational_version: '{version}'
+build:
+  verbosity: minimal
+after_build:
+- ps: nuget.exe pack .\PRI.Messaging.Patterns\PRI.Messaging.Patterns.csproj -Prop Configuration=Release -Symbols -version $env:APPVEYOR_BUILD_VERSION
+artifacts:
+- path: '*.nupkg'
+  name: nuget
+deploy:
+- provider: NuGet
+  api_key:
+    secure: K+dA1tJ3qNFfJ6G484VCFE9igeHb/BGa6tdJVKcaxvHYK6rwPsKrO/c5EahHvxsP
+  artifact: nuget

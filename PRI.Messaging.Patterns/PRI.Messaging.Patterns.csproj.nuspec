@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<package >
+  <metadata>
+    <id>PRI.Messaging.Patterns</id>
+    <version>$version$</version>
+    <authors>Peter Ritchie</authors>
+    <licenseUrl>https://raw.githubusercontent.com/peteraritchie/Messaging.Patterns/develop/LICENSE</licenseUrl>
+    <projectUrl>https://github.com/peteraritchie/Messaging.Patterns</projectUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <description>Package description</description>
+    <releaseNotes>re-targeted for .NET 4.5</releaseNotes>
+    <copyright>Copyright 2016</copyright>
+    <tags>Messaging message-oriented events</tags>
+  </metadata>
+</package>

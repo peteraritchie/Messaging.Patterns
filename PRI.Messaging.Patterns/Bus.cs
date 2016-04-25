@@ -35,8 +35,16 @@ namespace PRI.Messaging.Patterns
 		public void Handle(IMessage message)
 		{
 			var messageType = message.GetType();
-			if (_singleConsumerDelegate != null) _singleConsumerDelegate(message);
-			else _consumerInvokers[messageType.MetadataToken](message);
+			if (_singleConsumerDelegate != null)
+			{
+				_singleConsumerDelegate(message);
+				return;
+			}
+			Action<IMessage> consumerInvoker;
+			if (_consumerInvokers.TryGetValue(messageType.MetadataToken, out consumerInvoker))
+			{
+				consumerInvoker(message);
+			}
 		}
 
 		public void AddTranslator<TIn, TOut>(IPipe<TIn, TOut> pipe) where TIn : IMessage where TOut : IMessage

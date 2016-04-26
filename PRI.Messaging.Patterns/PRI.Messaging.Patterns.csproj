@@ -52,6 +52,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="ActionConsumer.cs" />
+    <Compile Include="ActionPipe.cs" />
     <Compile Include="Bus.cs" />
     <Compile Include="Extensions\Bus\BusExtensions.cs" />
     <Compile Include="Internal\IMessageQueue.cs" />

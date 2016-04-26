@@ -15,13 +15,15 @@ namespace PRI.Messaging.Patterns
 	public class ActionConsumer<T> : IConsumer<T> where T : IMessage
 	{
 		private readonly Action<T> _action;
+
 		public void Handle(T message)
 		{
 			_action(message);
 		}
+
 		public ActionConsumer(Action<T> action)
 		{
-			if (action == null) throw new ArgumentNullException("action");
+			if (action == null) throw new ArgumentNullException(nameof(action));
 			_action = action;
 		}
 	}

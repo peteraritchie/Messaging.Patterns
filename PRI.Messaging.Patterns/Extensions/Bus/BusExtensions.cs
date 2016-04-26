@@ -3,14 +3,33 @@ using System.Linq;
 using PRI.Messaging.Primitives;
 using PRI.ProductivityExtensions.ReflectionExtensions;
 using System.Collections.Generic;
-using System.Reflection;
+using System.Diagnostics;
 
 namespace PRI.Messaging.Patterns.Extensions.Bus
 {
 	public static class BusExtensions
 	{
-		private static Dictionary<Patterns.Bus, Dictionary<Type, Delegate>> busResolverDictionaries = new Dictionary<Patterns.Bus, Dictionary<Type, Delegate>>();
+		private static readonly Dictionary<Patterns.Bus, Dictionary<Type, Delegate>> busResolverDictionaries = new Dictionary<Patterns.Bus, Dictionary<Type, Delegate>>();
 
+		/// <summary>
+		/// Add the ability to resolve an instance of <typeparam name="T"></typeparam>
+		/// Without adding a resolver the bus will attempt to find and call the default
+		/// constructor to create an instance when adding handlers from assemblies.
+		/// Use <see cref="AddResolver{T}"/> if your handler does not have default constructor
+		/// or you want to re-use an instance.
+		/// </summary>
+		/// <example>
+		/// <code>
+		/// // For type MessageHandler, call the c'tor that takes an IBus parameter
+		/// bus.AddResolver(()=> new MessageHandler(bus));
+		/// // find all the handlers in assemblies named *handlers.dll" in the current directory in the namespace
+		/// "MyCorp.MessageHandlers
+		/// bus.AddHandlersAndTranslators(Directory.GetCurrentDirectory(), "*handlers.dll", "MyCorp.MessageHandlers");
+		/// </code>
+		/// </example>
+		/// <typeparam name="T">The type of instance to resolve.  Typically of type IConsumer{TMessage}</typeparam>
+		/// <param name="bus">The <seealso cref="IBus"/> instance this will apply to</param>
+		/// <param name="resolver">A delegate that returns an instance of <typeparamref name="T"/></param>
 		public static void AddResolver<T>(this Patterns.Bus bus, Func<T> resolver)
 		{
 			if(!busResolverDictionaries.ContainsKey(bus)) busResolverDictionaries.Add(bus, new Dictionary<Type, Delegate>());
@@ -19,17 +38,24 @@ namespace PRI.Messaging.Patterns.Extensions.Bus
 		}
 
 		/// <summary>
-		/// 
+		/// Dynamically load message handlers by filename in a specific directory.
 		/// </summary>
-		/// <param name="bus"></param>
-		/// <param name="directory"></param>
-		/// <param name="wildcard"></param>
-		/// <param name="namespace"></param>
+		/// <example>
+		/// <code>
+		/// // find all the handlers in assemblies named *handlers.dll" in the current directory in the namespace
+		/// "MyCorp.MessageHandlers
+		/// bus.AddHandlersAndTranslators(Directory.GetCurrentDirectory(), "*handlers.dll", "MyCorp.MessageHandlers");
+		/// </code>
+		/// </example>
+		/// <param name="bus">The <seealso cref="IBus"/> instance this will apply to</param>
+		/// <param name="directory">What directory to search</param>
+		/// <param name="wildcard">What filenames to search</param>
+		/// <param name="namespace">Include IConumers{TMessage} within this namespace</param>
 		public static void AddHandlersAndTranslators(this Patterns.Bus bus, string directory, string wildcard, string @namespace)
 		{
 			if (!busResolverDictionaries.ContainsKey(bus)) busResolverDictionaries.Add(bus, new Dictionary<Type, Delegate>());
 
-			var consumerTypes = typeof(IConsumer<>).ByImplementedInterfaceInDirectory(directory, wildcard, @namespace);
+			IEnumerable<Type> consumerTypes = typeof(IConsumer<>).ByImplementedInterfaceInDirectory(directory, wildcard, @namespace);
 			foreach (var consumerType in consumerTypes)
 			{
 				var pipeImplementationInterface =
@@ -45,16 +71,17 @@ namespace PRI.Messaging.Patterns.Extensions.Bus
 						? InvokeFunc(busResolverDictionaries[bus][translatorType])
 						: Activator.CreateInstance(translatorType);
 
-					// get instance of the helper
+					// get instance of the helper that will help add specific handler
+					// code to the bus.
 					var helperType1 = typeof (PipeAttachConsumerHelper<,>).MakeGenericType(messageTypes);
 					var helperType1Instance = Activator.CreateInstance(helperType1);
-					var attachConsumerMethodInfo = helperType1.GetMethod("AttachConsumer");
+					var attachConsumerMethodInfo = helperType1.GetMethod(nameof(IProducer<IMessage>.AttachConsumer));
 					attachConsumerMethodInfo.Invoke(helperType1Instance, new[] {translatorInstance, bus});
 
 					var inType = messageTypes[0];
 					var helperType = typeof (BusAddhHandlerHelper<>).MakeGenericType(inType);
 					var helperInstance = Activator.CreateInstance(helperType);
-					var addHandlerMethodInfo = helperType.GetMethod("AddHandler");
+					var addHandlerMethodInfo = helperType.GetMethod(nameof(IBus.AddHandler));
 
 					addHandlerMethodInfo.Invoke(helperInstance, new[] {bus, translatorInstance});
 				}
@@ -63,14 +90,14 @@ namespace PRI.Messaging.Patterns.Extensions.Bus
 					var consumerImplementationInterface =
 						consumerType.GetInterfaces()
 							.FirstOrDefault(t => !t.IsGenericTypeDefinition && t.GetGenericTypeDefinition() == typeof (IConsumer<>));
-					if (consumerImplementationInterface == null)
-						throw new InvalidOperationException("Type X did not implement IConsumer<> propertly");
+					Debug.Assert(consumerImplementationInterface != null,
+						"Unexpected state enumerating implementations of IConsumer<T>");
 
 					var messageTypes = consumerImplementationInterface.GetGenericTypeArguments();
 
 					var helperType = typeof (BusAddhHandlerHelper<>).MakeGenericType(messageTypes);
 					var helperInstance = Activator.CreateInstance(helperType);
-					var addHandlerMethodInfo = helperType.GetMethod("AddHandler");
+					var addHandlerMethodInfo = helperType.GetMethod(nameof(IBus.AddHandler));
 
 					var handlerInstance = busResolverDictionaries[bus].ContainsKey(consumerType)
 						? InvokeFunc(busResolverDictionaries[bus][consumerType])
@@ -81,6 +108,33 @@ namespace PRI.Messaging.Patterns.Extensions.Bus
 			}
 		}
 
+		/// <summary>
+		/// Alias to be explicit about the intent of handling an <see cref="IMessage"/> instance.
+		/// </summary>
+		/// <typeparam name="TMessage">IMessage-based type to send</typeparam>
+		/// <param name="bus">bus to send within</param>
+		/// <param name="message">Message to send</param>
+		public static void Send<TMessage>(this IBus bus, TMessage message) where TMessage : IMessage
+		{
+			bus.Handle(message);
+		}
+
+		/// <summary>
+		/// Aliaos to be explcit about the intent of handling an <see cref="IEvent"/> instance.
+		/// </summary>
+		/// <typeparam name="TEvent">IEvent-based type to publish</typeparam>
+		/// <param name="bus">bus to send within</param>
+		/// <param name="event">Event to publish</param>
+		public static void Publish<TEvent>(this IBus bus, TEvent @event) where TEvent : IEvent
+		{
+			bus.Handle(@event);
+		}
+
+		/// <summary>
+		/// Given only a delegate, invoke it via reflection
+		/// </summary>
+		/// <param name="func">The delegate to invoke</param>
+		/// <returns>Whatever <paramref name="func"/> returns</returns>
 		private static object InvokeFunc(Delegate func)
 		{
 			return func.Method.Invoke(func.Target, null);

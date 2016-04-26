@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using PRI.Messaging.Primitives;
 
@@ -30,7 +32,7 @@ namespace PRI.Messaging.Patterns
 	public class Bus : IBus
 	{
 		internal readonly Dictionary<int, Action<IMessage>> _consumerInvokers = new Dictionary<int, Action<IMessage>>();
-		private Action<object> _singleConsumerDelegate;
+		private Action<IMessage> _singleConsumerDelegate;
 
 		public void Handle(IMessage message)
 		{
@@ -51,15 +53,44 @@ namespace PRI.Messaging.Patterns
 		{
 			pipe.AttachConsumer(new ActionConsumer<TOut>(m => this.Handle(m)));
 
-			_consumerInvokers.Add(typeof(TIn).MetadataToken, o => pipe.Handle((TIn) o));
-			_singleConsumerDelegate = _consumerInvokers.Count > 1 ? (Action<object>) null : (o => pipe.Handle((TIn) o));
+			Action<IMessage> handler = o => pipe.Handle((TIn) o);
+			_consumerInvokers.Add(typeof(TIn).MetadataToken, handler);
+			if (_consumerInvokers.Count > 1) _singleConsumerDelegate = (Action<object>) null;
+			else _singleConsumerDelegate = handler;
+		}
+
+		private Action<IMessage> CreateConsumerDelegate<TIn>(IConsumer<TIn> consumer) where TIn : IMessage
+		{
+			return o => consumer.Handle((TIn) o);
 		}
 
 		public void AddHandler<TIn>(IConsumer<TIn> consumer) where TIn : IMessage
 		{
-			_consumerInvokers.Add(typeof(TIn).MetadataToken, o => consumer.Handle((TIn)o));
-			_singleConsumerDelegate = _consumerInvokers.Count > 1 ? (Action<object>)null :  (o => consumer.Handle((TIn)o));
+			Action<IMessage> handler = CreateConsumerDelegate(consumer);
+			if (_consumerInvokers.ContainsKey(typeof(TIn).MetadataToken))
+			{
+				_consumerInvokers[typeof(TIn).MetadataToken] += handler;
+				_singleConsumerDelegate = null;
+			}
+			else
+			{
+				_consumerInvokers.Add(typeof(TIn).MetadataToken, handler);
+				_singleConsumerDelegate = _consumerInvokers.Count > 1 ? null : handler;
+			}
 		}
 
+		public void RemoveHandler<TIn>(IConsumer<TIn> consumer) where TIn: IMessage
+		{
+			if (!_consumerInvokers.ContainsKey(typeof(TIn).MetadataToken)) return;
+
+			var list = _consumerInvokers[typeof(TIn).MetadataToken].GetInvocationList();
+			var initialCount = list.Length;
+			Action<IMessage> handler = CreateConsumerDelegate(consumer);
+			Delegate m =
+				list.LastOrDefault(e => e.Method.Name == handler.Method.Name && e.Target.GetType() == handler.Target.GetType());
+			if (m != null) _consumerInvokers[typeof(TIn).MetadataToken] -= (Action<IMessage>) m;
+			list = _consumerInvokers[typeof(TIn).MetadataToken].GetInvocationList();
+			Debug.Assert(initialCount != list.Length);
+		}
 	}
 }

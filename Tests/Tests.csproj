@@ -64,8 +64,10 @@
   <ItemGroup>
     <Compile Include="BusTests.cs" />
     <Compile Include="ComposingBusByDiscovery.cs" />
+    <Compile Include="CreatingActionConsumers.cs" />
     <Compile Include="HandlingMessagesThenSpeedIsAcceptable.cs" />
     <Compile Include="ManuallyComposingBus.cs" />
+    <Compile Include="Messaging.cs" />
     <Compile Include="Mocks\Message1.cs" />
     <Compile Include="Mocks\Message2.cs" />
     <Compile Include="Mocks\Message2Consumer.cs" />

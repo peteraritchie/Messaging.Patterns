@@ -23,7 +23,7 @@ namespace PRI.Messaging.Patterns
 
 		public ActionConsumer(Action<T> action)
 		{
-			if (action == null) throw new ArgumentNullException(nameof(action));
+			if (action == null) throw new ArgumentNullException("action");
 			_action = action;
 		}
 	}

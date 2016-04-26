@@ -75,13 +75,13 @@ namespace PRI.Messaging.Patterns.Extensions.Bus
 					// code to the bus.
 					var helperType1 = typeof (PipeAttachConsumerHelper<,>).MakeGenericType(messageTypes);
 					var helperType1Instance = Activator.CreateInstance(helperType1);
-					var attachConsumerMethodInfo = helperType1.GetMethod(nameof(IProducer<IMessage>.AttachConsumer));
+					var attachConsumerMethodInfo = helperType1.GetMethod("AttachConsumer");
 					attachConsumerMethodInfo.Invoke(helperType1Instance, new[] {translatorInstance, bus});
 
 					var inType = messageTypes[0];
 					var helperType = typeof (BusAddhHandlerHelper<>).MakeGenericType(inType);
 					var helperInstance = Activator.CreateInstance(helperType);
-					var addHandlerMethodInfo = helperType.GetMethod(nameof(IBus.AddHandler));
+					var addHandlerMethodInfo = helperType.GetMethod("AddHandler");
 
 					addHandlerMethodInfo.Invoke(helperInstance, new[] {bus, translatorInstance});
 				}
@@ -97,7 +97,7 @@ namespace PRI.Messaging.Patterns.Extensions.Bus
 
 					var helperType = typeof (BusAddhHandlerHelper<>).MakeGenericType(messageTypes);
 					var helperInstance = Activator.CreateInstance(helperType);
-					var addHandlerMethodInfo = helperType.GetMethod(nameof(IBus.AddHandler));
+					var addHandlerMethodInfo = helperType.GetMethod("AddHandler");
 
 					var handlerInstance = busResolverDictionaries[bus].ContainsKey(consumerType)
 						? InvokeFunc(busResolverDictionaries[bus][consumerType])

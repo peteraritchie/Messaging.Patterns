@@ -46,6 +46,30 @@ namespace PRI.Messaging.Patterns
 			if (_consumerInvokers.TryGetValue(messageType.MetadataToken, out consumerInvoker))
 			{
 				consumerInvoker(message);
+				return;
+			}
+
+			// check base type hierarchy.
+			messageType = messageType.BaseType;
+			while (messageType != null && messageType != typeof(object))
+			{
+				if (_consumerInvokers.TryGetValue(messageType.MetadataToken, out consumerInvoker))
+				{
+					consumerInvoker(message);
+					return;
+				}
+				messageType = messageType.BaseType;
+			}
+
+			// check any implemented interfaces
+			messageType = message.GetType();
+			foreach (var interfaceType in messageType.FindInterfaces((type, criteria) => true, null))
+			{
+				if (_consumerInvokers.TryGetValue(interfaceType.MetadataToken, out consumerInvoker))
+				{
+					consumerInvoker(message);
+					return;
+				}
 			}
 		}
 

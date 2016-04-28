@@ -55,5 +55,25 @@ namespace Tests
 			Assert.AreEqual(message1.CorrelationId, receivedMessage.CorrelationId);
 			Assert.AreEqual("ding", text);
 		}
+
+		[Test]
+		public void EnsureWithMultipleMessageTypesInterfaceHandlerIsInvoked()
+		{
+			var bus = new Bus();
+			Message1 receivedMessage1 = null;
+			bus.AddHandler(new ActionConsumer<Message1>(m => receivedMessage1 = m));
+			Message2 receivedMessage2 = null;
+			bus.AddHandler(new ActionConsumer<Message2>(m => receivedMessage2 = m));
+			string text = null;
+			bus.AddHandler(new ActionConsumer<IEvent>(_ => { text = "ding"; }));
+
+			var message1 = new Message1 { CorrelationId = "1234" };
+			bus.Handle(message1);
+			bus.Handle(new MyEvent());
+			Assert.AreSame(message1, receivedMessage1);
+			Assert.IsNotNull(receivedMessage1);
+			Assert.AreEqual(message1.CorrelationId, receivedMessage1.CorrelationId);
+			Assert.AreEqual("ding", text);
+		}
 	}
 }

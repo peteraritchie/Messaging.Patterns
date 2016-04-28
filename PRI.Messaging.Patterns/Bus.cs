@@ -32,16 +32,10 @@ namespace PRI.Messaging.Patterns
 	public class Bus : IBus
 	{
 		internal readonly Dictionary<int, Action<IMessage>> _consumerInvokers = new Dictionary<int, Action<IMessage>>();
-		private Action<IMessage> _singleConsumerDelegate;
 
 		public void Handle(IMessage message)
 		{
 			var messageType = message.GetType();
-			if (_singleConsumerDelegate != null)
-			{
-				_singleConsumerDelegate(message);
-				return;
-			}
 			Action<IMessage> consumerInvoker;
 			if (_consumerInvokers.TryGetValue(messageType.MetadataToken, out consumerInvoker))
 			{
@@ -79,8 +73,6 @@ namespace PRI.Messaging.Patterns
 
 			Action<IMessage> handler = o => pipe.Handle((TIn) o);
 			_consumerInvokers.Add(typeof(TIn).MetadataToken, handler);
-			if (_consumerInvokers.Count > 1) _singleConsumerDelegate = (Action<object>) null;
-			else _singleConsumerDelegate = handler;
 		}
 
 		private Action<IMessage> CreateConsumerDelegate<TIn>(IConsumer<TIn> consumer) where TIn : IMessage
@@ -94,12 +86,10 @@ namespace PRI.Messaging.Patterns
 			if (_consumerInvokers.ContainsKey(typeof(TIn).MetadataToken))
 			{
 				_consumerInvokers[typeof(TIn).MetadataToken] += handler;
-				_singleConsumerDelegate = null;
 			}
 			else
 			{
 				_consumerInvokers.Add(typeof(TIn).MetadataToken, handler);
-				_singleConsumerDelegate = _consumerInvokers.Count > 1 ? null : handler;
 			}
 		}
 

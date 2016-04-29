@@ -26,16 +26,16 @@ namespace Tests
 			Assert.AreEqual(message1.CorrelationId, receivedMessage.CorrelationId);
 		}
 
-		public class MyEvent : IEvent
+		public class TheEvent : IEvent
 		{
-			public MyEvent()
+			public TheEvent()
 			{
 				CorrelationId = Guid.NewGuid().ToString("D");
-				OccurreDateTime = DateTime.UtcNow;
+				OccurredDateTime = DateTime.UtcNow;
 			}
 
 			public string CorrelationId { get; set; }
-			public DateTime OccurreDateTime { get; set; }
+			public DateTime OccurredDateTime { get; set; }
 		}
 
 		[Test]
@@ -49,7 +49,7 @@ namespace Tests
 
 			var message1 = new Message1 { CorrelationId = "1234" };
 			bus.Handle(message1);
-			bus.Handle(new MyEvent());
+			bus.Handle(new TheEvent());
 			Assert.AreSame(message1, receivedMessage);
 			Assert.IsNotNull(receivedMessage);
 			Assert.AreEqual(message1.CorrelationId, receivedMessage.CorrelationId);
@@ -69,11 +69,58 @@ namespace Tests
 
 			var message1 = new Message1 { CorrelationId = "1234" };
 			bus.Handle(message1);
-			bus.Handle(new MyEvent());
+			bus.Handle(new TheEvent());
 			Assert.AreSame(message1, receivedMessage1);
 			Assert.IsNotNull(receivedMessage1);
 			Assert.AreEqual(message1.CorrelationId, receivedMessage1.CorrelationId);
 			Assert.AreEqual("ding", text);
+		}
+
+		public class Message1Specialization : Message1
+		{
+		}
+
+		[Test]
+		public void BaseTypeHandlerIsCalledCorrectly()
+		{
+			var bus = new Bus();
+			Message1 receivedMessage1 = null;
+			bus.AddHandler(new ActionConsumer<Message1>(m => receivedMessage1 = m));
+			var message1 = new Message1Specialization { CorrelationId = "1234" };
+			bus.Handle(message1);
+			Assert.AreSame(message1, receivedMessage1);
+		}
+
+		public class Message1SpecializationSpecialization : Message1Specialization
+		{
+		}
+
+		[Test]
+		public void BaseBaseTypeHandlerIsCalledCorrectly()
+		{
+			var bus = new Bus();
+			Message1 receivedMessage1 = null;
+			bus.AddHandler(new ActionConsumer<Message1>(m => receivedMessage1 = m));
+			var message1 = new Message1SpecializationSpecialization() { CorrelationId = "1234" };
+			bus.Handle(message1);
+			Assert.AreSame(message1, receivedMessage1);
+		}
+
+		[Test]
+		public void RemoveUnsubscribedHandlerDoesNotThrow()
+		{
+			var bus = new Bus();
+			Message1 receivedMessage1 = null;
+			bus.RemoveHandler(new ActionConsumer<Message1>(m => receivedMessage1 = m));
+		}
+
+		[Test]
+		public void RemoveLastSubscribedHandlerDoesNotThrow()
+		{
+			var bus = new Bus();
+			Message1 receivedMessage1 = null;
+			bus.AddHandler(new ActionConsumer<Message1>(m => receivedMessage1 = m));
+			bus.RemoveHandler(new ActionConsumer<Message1>(m => receivedMessage1 = m));
 		}
 	}
 }

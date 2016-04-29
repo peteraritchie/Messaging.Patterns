@@ -1,5 +1,4 @@
-﻿using System.Messaging;
-using NUnit.Framework;
+﻿using NUnit.Framework;
 using PRI.Messaging.Patterns;
 using PRI.Messaging.Primitives;
 using Tests.Mocks;

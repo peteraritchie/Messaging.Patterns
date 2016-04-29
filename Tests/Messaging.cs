@@ -28,11 +28,11 @@ namespace Tests
 			public MyEvent()
 			{
 				CorrelationId = Guid.NewGuid().ToString("D");
-				OccurreDateTime = DateTime.UtcNow;
+				OccurredDateTime = DateTime.UtcNow;
 			}
 
 			public string CorrelationId { get; set; }
-			public DateTime OccurreDateTime { get; set; }
+			public DateTime OccurredDateTime { get; set; }
 		}
 
 		public class MyMessage : IMessage

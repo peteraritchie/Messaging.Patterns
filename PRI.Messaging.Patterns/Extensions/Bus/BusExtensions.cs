@@ -4,6 +4,8 @@ using PRI.Messaging.Primitives;
 using PRI.ProductivityExtensions.ReflectionExtensions;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace PRI.Messaging.Patterns.Extensions.Bus
 {
@@ -128,6 +130,48 @@ namespace PRI.Messaging.Patterns.Extensions.Bus
 		public static void Publish<TEvent>(this IBus bus, TEvent @event) where TEvent : IEvent
 		{
 			bus.Handle(@event);
+		}
+
+		/// <summary>
+		/// Perform a request/response
+		/// </summary>
+		/// <typeparam name="TMessage">The type of the message being sent</typeparam>
+		/// <typeparam name="TEvent">The type of the event for the response</typeparam>
+		/// <param name="bus">The bus to send/receive from</param>
+		/// <param name="message">The message to send</param>
+		/// <returns>The event response</returns>
+		public static Task<TEvent> RequestAsync<TMessage, TEvent>(this IBus bus, TMessage message) where TMessage : IMessage
+			where TEvent : IEvent
+		{
+			return RequestAsync<TMessage, TEvent>(bus, message, CancellationToken.None);
+		}
+
+		/// <summary>
+		/// Perform a request/response
+		/// </summary>
+		/// <typeparam name="TMessage">The type of the message being sent</typeparam>
+		/// <typeparam name="TEvent">The type of the event for the response</typeparam>
+		/// <param name="bus">The bus to send/receive from</param>
+		/// <param name="message">The message to send</param>
+		/// <param name="cancellationToken">CancellationToken to use to cancel or timeout.</param>
+		/// <returns>The event response</returns>
+		public static Task<TEvent> RequestAsync<TMessage, TEvent>(this IBus bus, TMessage message, CancellationToken cancellationToken) where TMessage : IMessage
+			where TEvent : IEvent
+		{
+			if (bus == null) throw new ArgumentNullException(nameof(bus));
+			if (message == null) throw new ArgumentNullException(nameof(message));
+
+			var tcs = new TaskCompletionSource<TEvent>();
+			cancellationToken.Register(() => tcs.TrySetCanceled(), useSynchronizationContext: false);
+			ActionConsumer<TEvent> actionConsumer = null;
+			actionConsumer = new ActionConsumer<TEvent>(e =>
+			{
+				if (actionConsumer != null) bus.RemoveHandler(actionConsumer);
+				tcs.SetResult(e);
+			});
+			bus.AddHandler(actionConsumer);
+			bus.Send(message);
+			return tcs.Task;
 		}
 
 		/// <summary>

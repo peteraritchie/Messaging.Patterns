@@ -103,8 +103,14 @@ namespace PRI.Messaging.Patterns
 			Delegate m =
 				list.LastOrDefault(e => e.Method.Name == handler.Method.Name && e.Target.GetType() == handler.Target.GetType());
 			if (m != null) _consumerInvokers[typeof(TIn).GUID] -= (Action<IMessage>) m;
-			list = _consumerInvokers[typeof(TIn).GUID].GetInvocationList();
-			Debug.Assert(initialCount != list.Length);
+			if (!_consumerInvokers.ContainsKey(typeof(TIn).GUID)) return;
+			if (_consumerInvokers[typeof(TIn).GUID] != null)
+			{
+				list = _consumerInvokers[typeof(TIn).GUID].GetInvocationList();
+				Debug.Assert(initialCount != list.Length);
+			}
+			else
+				_consumerInvokers.Remove(typeof(TIn).GUID);
 		}
 	}
 }

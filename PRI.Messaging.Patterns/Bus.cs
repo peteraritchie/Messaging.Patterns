@@ -31,13 +31,13 @@ namespace PRI.Messaging.Patterns
 	/// </summary>
 	public class Bus : IBus
 	{
-		internal readonly Dictionary<int, Action<IMessage>> _consumerInvokers = new Dictionary<int, Action<IMessage>>();
+		internal readonly Dictionary<Guid, Action<IMessage>> _consumerInvokers = new Dictionary<Guid, Action<IMessage>>();
 
 		public void Handle(IMessage message)
 		{
 			var messageType = message.GetType();
 			Action<IMessage> consumerInvoker;
-			if (_consumerInvokers.TryGetValue(messageType.MetadataToken, out consumerInvoker))
+			if (_consumerInvokers.TryGetValue(messageType.GUID, out consumerInvoker))
 			{
 				consumerInvoker(message);
 				return;
@@ -47,7 +47,7 @@ namespace PRI.Messaging.Patterns
 			messageType = messageType.BaseType;
 			while (messageType != null && messageType != typeof(object))
 			{
-				if (_consumerInvokers.TryGetValue(messageType.MetadataToken, out consumerInvoker))
+				if (_consumerInvokers.TryGetValue(messageType.GUID, out consumerInvoker))
 				{
 					consumerInvoker(message);
 					return;
@@ -59,7 +59,7 @@ namespace PRI.Messaging.Patterns
 			messageType = message.GetType();
 			foreach (var interfaceType in messageType.FindInterfaces((type, criteria) => true, null))
 			{
-				if (_consumerInvokers.TryGetValue(interfaceType.MetadataToken, out consumerInvoker))
+				if (_consumerInvokers.TryGetValue(interfaceType.GUID, out consumerInvoker))
 				{
 					consumerInvoker(message);
 					return;
@@ -72,7 +72,7 @@ namespace PRI.Messaging.Patterns
 			pipe.AttachConsumer(new ActionConsumer<TOut>(m => this.Handle(m)));
 
 			Action<IMessage> handler = o => pipe.Handle((TIn) o);
-			_consumerInvokers.Add(typeof(TIn).MetadataToken, handler);
+			_consumerInvokers.Add(typeof(TIn).GUID, handler);
 		}
 
 		private Action<IMessage> CreateConsumerDelegate<TIn>(IConsumer<TIn> consumer) where TIn : IMessage
@@ -83,27 +83,27 @@ namespace PRI.Messaging.Patterns
 		public void AddHandler<TIn>(IConsumer<TIn> consumer) where TIn : IMessage
 		{
 			Action<IMessage> handler = CreateConsumerDelegate(consumer);
-			if (_consumerInvokers.ContainsKey(typeof(TIn).MetadataToken))
+			if (_consumerInvokers.ContainsKey(typeof(TIn).GUID))
 			{
-				_consumerInvokers[typeof(TIn).MetadataToken] += handler;
+				_consumerInvokers[typeof(TIn).GUID] += handler;
 			}
 			else
 			{
-				_consumerInvokers.Add(typeof(TIn).MetadataToken, handler);
+				_consumerInvokers.Add(typeof(TIn).GUID, handler);
 			}
 		}
 
 		public void RemoveHandler<TIn>(IConsumer<TIn> consumer) where TIn: IMessage
 		{
-			if (!_consumerInvokers.ContainsKey(typeof(TIn).MetadataToken)) return;
+			if (!_consumerInvokers.ContainsKey(typeof(TIn).GUID)) return;
 
-			var list = _consumerInvokers[typeof(TIn).MetadataToken].GetInvocationList();
+			var list = _consumerInvokers[typeof(TIn).GUID].GetInvocationList();
 			var initialCount = list.Length;
 			Action<IMessage> handler = CreateConsumerDelegate(consumer);
 			Delegate m =
 				list.LastOrDefault(e => e.Method.Name == handler.Method.Name && e.Target.GetType() == handler.Target.GetType());
-			if (m != null) _consumerInvokers[typeof(TIn).MetadataToken] -= (Action<IMessage>) m;
-			list = _consumerInvokers[typeof(TIn).MetadataToken].GetInvocationList();
+			if (m != null) _consumerInvokers[typeof(TIn).GUID] -= (Action<IMessage>) m;
+			list = _consumerInvokers[typeof(TIn).GUID].GetInvocationList();
 			Debug.Assert(initialCount != list.Length);
 		}
 	}

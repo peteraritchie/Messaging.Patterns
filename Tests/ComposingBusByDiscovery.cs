@@ -1,11 +1,16 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel.Composition;
+using System.ComponentModel.Composition.Hosting;
 using System.IO;
+using Microsoft.Mef.CommonServiceLocator;
+using Microsoft.Practices.ServiceLocation;
 using NUnit.Framework;
 using NUnit.Framework.Compatibility;
 using PRI.ProductivityExtensions.TemporalExtensions;
 using PRI.Messaging.Patterns;
 using PRI.Messaging.Patterns.Extensions.Bus;
+using PRI.Messaging.Primitives;
 using Tests.Mocks;
 
 namespace Tests
@@ -48,6 +53,75 @@ namespace Tests
 			bus.AddHandlersAndTranslators(directory, "Tests*.dll", "Tests.Mocks");
 
 			Assert.AreEqual(1, calledCount);
+		}
+
+		[Test]
+		public void ServiceLocatorResolves()
+		{
+			var bus = new Bus();
+
+			#region composition root
+
+			var catalog = new AggregateCatalog();
+			catalog.Catalogs.Add(new AssemblyCatalog(typeof(Message2Consumer).Assembly));
+			var compositionContainer = new CompositionContainer(catalog);
+			var message2Consumer = new Message2Consumer();
+			compositionContainer.ComposeExportedValue(message2Consumer);
+			compositionContainer.ComposeExportedValue(new Pipe());
+			ServiceLocator.SetLocatorProvider(() => new MefServiceLocator(compositionContainer));
+
+			#endregion
+
+			bus.SetServiceLocator(ServiceLocator.Current);
+
+			var directory = Path.GetDirectoryName(new Uri(GetType().Assembly.CodeBase).LocalPath);
+			bus.AddHandlersAndTranslators(directory, "Tests*.dll", "Tests.Mocks");
+
+			bus.Handle(new Message2());
+
+			Assert.AreEqual(1, message2Consumer.MessageReceivedCount);
+		}
+
+		[Test]
+		public void NullBusThrowsWhenSettingServiceLocator()
+		{
+			Bus bus = null;
+			Assert.Throws<ArgumentNullException>(()=>bus.SetServiceLocator(null));
+		}
+
+		[Test]
+		public void NullServiceLocatorThrowsWhenSettingServiceLocator()
+		{
+			Bus bus = new Bus();
+			Assert.Throws<ArgumentNullException>(() => bus.SetServiceLocator(null));
+		}
+
+		[Test]
+		public void SecondServiceLocatorResolves()
+		{
+			var bus = new Bus();
+
+			#region composition root
+
+			var catalog = new AggregateCatalog();
+			catalog.Catalogs.Add(new AssemblyCatalog(typeof(Message2Consumer).Assembly));
+			var compositionContainer = new CompositionContainer(catalog);
+			var message2Consumer = new Message2Consumer();
+			ServiceLocator.SetLocatorProvider(() => new MefServiceLocator(compositionContainer));
+
+			#endregion
+
+			bus.SetServiceLocator(new MefServiceLocator(compositionContainer));
+			compositionContainer.ComposeExportedValue(message2Consumer);
+			compositionContainer.ComposeExportedValue(new Pipe());
+			bus.SetServiceLocator(new MefServiceLocator(compositionContainer));
+
+			var directory = Path.GetDirectoryName(new Uri(GetType().Assembly.CodeBase).LocalPath);
+			bus.AddHandlersAndTranslators(directory, "Tests*.dll", "Tests.Mocks");
+
+			bus.Handle(new Message2());
+
+			Assert.AreEqual(1, message2Consumer.MessageReceivedCount);
 		}
 
 		[Test, Category("Performance")]

@@ -4,14 +4,17 @@ using PRI.Messaging.Primitives;
 using PRI.ProductivityExtensions.ReflectionExtensions;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Practices.ServiceLocation;
 
 namespace PRI.Messaging.Patterns.Extensions.Bus
 {
 	public static class BusExtensions
 	{
 		private static readonly Dictionary<Patterns.Bus, Dictionary<Type, Delegate>> busResolverDictionaries = new Dictionary<Patterns.Bus, Dictionary<Type, Delegate>>();
+		private static readonly Dictionary<Patterns.Bus, IServiceLocator> busServiceLocators = new Dictionary<Patterns.Bus, IServiceLocator>();
 
 		/// <summary>
 		/// Add the ability to resolve an instance of <typeparam name="T"></typeparam>
@@ -39,6 +42,33 @@ namespace PRI.Messaging.Patterns.Extensions.Bus
 			dictionary[typeof (T)] = resolver;
 		}
 
+		public static void SetServiceLocator(this Patterns.Bus bus, IServiceLocator serviceLocator)
+		{
+			if (bus == null) throw new ArgumentNullException(nameof(bus));
+			if (serviceLocator == null) throw new ArgumentNullException(nameof(serviceLocator));
+			if (!busServiceLocators.ContainsKey(bus))
+				busServiceLocators.Add(bus, serviceLocator);
+			else
+				busServiceLocators[bus] = serviceLocator;
+		}
+
+		/// <summary>
+		/// A private class to handle Activator creations as a service locator type
+		/// </summary>
+		private class ActivatorServiceLocator : ServiceLocatorImplBase
+		{
+			protected override object DoGetInstance(Type serviceType, string key)
+			{
+				return Activator.CreateInstance(serviceType);
+			}
+
+			[ExcludeFromCodeCoverage]
+			protected override IEnumerable<object> DoGetAllInstances(Type serviceType)
+			{
+				throw new NotImplementedException();
+			}
+		}
+
 		/// <summary>
 		/// Dynamically load message handlers by filename in a specific directory.
 		/// </summary>
@@ -52,10 +82,11 @@ namespace PRI.Messaging.Patterns.Extensions.Bus
 		/// <param name="bus">The <seealso cref="IBus"/> instance this will apply to</param>
 		/// <param name="directory">What directory to search</param>
 		/// <param name="wildcard">What filenames to search</param>
-		/// <param name="namespace">Include IConumers{TMessage} within this namespace</param>
+		/// <param name="namespace">Include IConsumers{TMessage} within this namespace</param>
 		public static void AddHandlersAndTranslators(this Patterns.Bus bus, string directory, string wildcard, string @namespace)
 		{
 			if (!busResolverDictionaries.ContainsKey(bus)) busResolverDictionaries.Add(bus, new Dictionary<Type, Delegate>());
+			IServiceLocator serviceLocator = busServiceLocators.ContainsKey(bus) ? busServiceLocators[bus] : new ActivatorServiceLocator();
 
 			IEnumerable<Type> consumerTypes = typeof(IConsumer<>).ByImplementedInterfaceInDirectory(directory, wildcard, @namespace);
 			foreach (var consumerType in consumerTypes)
@@ -71,7 +102,7 @@ namespace PRI.Messaging.Patterns.Extensions.Bus
 					// get instance of pipe
 					var translatorInstance = busResolverDictionaries[bus].ContainsKey(translatorType)
 						? InvokeFunc(busResolverDictionaries[bus][translatorType])
-						: Activator.CreateInstance(translatorType);
+						: serviceLocator.GetInstance(translatorType);
 
 					// get instance of the helper that will help add specific handler
 					// code to the bus.
@@ -103,7 +134,7 @@ namespace PRI.Messaging.Patterns.Extensions.Bus
 
 					var handlerInstance = busResolverDictionaries[bus].ContainsKey(consumerType)
 						? InvokeFunc(busResolverDictionaries[bus][consumerType])
-						: Activator.CreateInstance(consumerType);
+						: serviceLocator.GetInstance(consumerType);
 
 					addHandlerMethodInfo.Invoke(helperInstance, new[] {bus, handlerInstance});
 				}
@@ -122,7 +153,7 @@ namespace PRI.Messaging.Patterns.Extensions.Bus
 		}
 
 		/// <summary>
-		/// Aliaos to be explcit about the intent of handling an <see cref="IEvent"/> instance.
+		/// Alias to be explicit about the intent of handling an <see cref="IEvent"/> instance.
 		/// </summary>
 		/// <typeparam name="TEvent">IEvent-based type to publish</typeparam>
 		/// <param name="bus">bus to send within</param>

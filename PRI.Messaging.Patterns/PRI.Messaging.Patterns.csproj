@@ -37,6 +37,10 @@
       <HintPath>..\packages\ProductivityExtensions.2.0.12\lib\net45\geschikt.dll</HintPath>
       <Private>True</Private>
     </Reference>
+    <Reference Include="Microsoft.Practices.ServiceLocation, Version=1.3.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
+      <HintPath>..\packages\CommonServiceLocator.1.3\lib\portable-net4+sl5+netcore45+wpa81+wp8\Microsoft.Practices.ServiceLocation.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
     <Reference Include="PRI.Messaging.Primitives, Version=1.0.9.0, Culture=neutral, processorArchitecture=MSIL">
       <HintPath>..\packages\PRI.Messaging.Primitives.1.0.9\lib\net40\PRI.Messaging.Primitives.dll</HintPath>
       <Private>True</Private>

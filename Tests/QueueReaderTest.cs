@@ -54,6 +54,13 @@ namespace Tests
 			}
 		}
 
+		[Test]
+		public void AttachingNullConsumerToMsmqReaderThrows()
+		{
+			var messageQueueMock = new Mock<IMessageQueue>();
+			var receiverReader = new MsmqReader<Message1>(messageQueueMock.Object, message1 => (Message1)message1.Message.Body);
+			Assert.Throws<ArgumentNullException>(() => receiverReader.AttachConsumer(null));
+		}
 
 		[Test]
 		public void TestQueueReaderWithMockMsmq()
@@ -75,13 +82,169 @@ namespace Tests
 					});
 
 			Message1 message = null;
-			var receiverReader = new MsmqReader<Message1>(messageQueueMock.Object, message1 => (Message1) message1.Message.Body);
-			receiverReader.AttachConsumer(new ActionConsumer<Message1>(m => message = m));
-			receiverReader.Start();
+			using (var receiverReader = new MsmqReader<Message1>(messageQueueMock.Object, message1 => (Message1) message1.Message.Body))
+			{
+				receiverReader.AttachConsumer(new ActionConsumer<Message1>(m => message = m));
+				receiverReader.Start();
+			}
 
 			Assert.IsNotNull(message);
 			Assert.AreEqual("f3e608d4-96cf-4093-9923-91b13f4b7555", message.CorrelationId);
 			messageQueueMock.Verify(m => m.BeginReceive(It.IsAny<TimeSpan>()), Times.Exactly(2));
+		}
+
+		[Test]
+		public void TestQueueReaderWithMockMsmqEndReceiveThrows()
+		{
+			var messageQueueMock = new Mock<IMessageQueue>();
+
+			messageQueueMock.Setup(m => m.EndReceive(It.IsAny<IAsyncResult>())).Throws(CreateMessageQueueException(-1072824283));
+			messageQueueMock.Setup(m => m.BeginReceive(It.IsAny<TimeSpan>()))
+				.Callback(
+					() =>
+					{
+						messageQueueMock.Raise(m => m.ReceiveCompleted += null,
+							new MessageQueueReceiveCompletedEventArgs(null));
+					});
+
+			using (var receiverReader = new MsmqReader<Message1>(messageQueueMock.Object, message1 => (Message1)message1.Message.Body))
+			{
+				receiverReader.AttachConsumer(new ActionConsumer<Message1>(m => { }));
+				Assert.Throws<MessageQueueException>(()=>receiverReader.Start());
+			}
+		}
+
+		[Test]
+		public void TestQueueReaderWithMockMsmqEndReceiveThrowsOnRetry()
+		{
+			var messageQueueMock = new Mock<IMessageQueue>();
+
+			var throwCount = 0;
+			messageQueueMock
+				.Setup(m => m.EndReceive(It.IsAny<IAsyncResult>()))
+				.Callback(() =>
+				{
+					throwCount++;
+					throw CreateMessageQueueException((int) MessageQueueErrorCode.IOTimeout);
+				});
+			messageQueueMock.Setup(m => m.BeginReceive(It.IsAny<TimeSpan>()))
+				.Callback(
+					() =>
+					{
+						if (throwCount > 0)
+							throw CreateMessageQueueException((int) MessageQueueErrorCode.AccessDenied);
+						messageQueueMock.Raise(m => m.ReceiveCompleted += null,
+							new MessageQueueReceiveCompletedEventArgs(null));
+					});
+
+			using (var receiverReader = new MsmqReader<Message1>(messageQueueMock.Object, message1 => (Message1)message1.Message.Body))
+			{
+				receiverReader.AttachConsumer(new ActionConsumer<Message1>(m => { }));
+				var exception = Assert.Throws<MessageQueueException>(() => receiverReader.Start());
+				Assert.AreNotEqual(MessageQueueErrorCode.IOTimeout, exception.MessageQueueErrorCode);
+			}
+		}
+
+		[Test]
+		public void TestQueueReaderWithMockMsmqEndReceiveOneRetry()
+		{
+			var actualMessage = new Message1{CorrelationId = "f3e608d4-96cf-4093-9923-91b13f4b7555"};
+			var messageQueueMock = new Mock<IMessageQueue>();
+			var messageMock = new MessageQueueMessageWrapper(new Message{Body = actualMessage});
+
+			var throwCount = 0;
+			messageQueueMock
+				.Setup(m => m.EndReceive(It.IsAny<IAsyncResult>()))
+				.Returns(()=>messageMock)
+				.Callback(() =>
+				{
+					throwCount++;
+					if(throwCount == 2)
+						throw CreateMessageQueueException((int)MessageQueueErrorCode.IOTimeout);
+					messageQueueMock.Raise(m => m.ReceiveCompleted += null,
+						new MessageQueueReceiveCompletedEventArgs(null));
+				});
+			bool beginReceiveCalled = false;
+			messageQueueMock.Setup(m => m.BeginReceive(It.IsAny<TimeSpan>()))
+				.Callback(
+					() =>
+					{
+						if (beginReceiveCalled) throw CreateMessageQueueException();
+						beginReceiveCalled = true;
+						messageQueueMock.Raise(m => m.ReceiveCompleted += null,
+							new MessageQueueReceiveCompletedEventArgs(null));
+					});
+
+			Message1 message = null;
+			using (var receiverReader = new MsmqReader<Message1>(messageQueueMock.Object, message1 => (Message1)message1.Message.Body))
+			{
+				receiverReader.AttachConsumer(new ActionConsumer<Message1>(m =>
+				{
+					message = m;
+					receiverReader.Dispose();
+				}));
+				receiverReader.Start();
+				Assert.IsNotNull(message);
+				Assert.AreEqual("f3e608d4-96cf-4093-9923-91b13f4b7555", message.CorrelationId);
+				messageQueueMock.Verify(m => m.BeginReceive(It.IsAny<TimeSpan>()), Times.Exactly(2));
+			}
+		}
+
+		[Test]
+		public void TestQueueReaderWithMockMsmqEndReceiveThrowsOn2ndRetry()
+		{
+			var messageQueueMock = new Mock<IMessageQueue>();
+
+			var throwCount = 0;
+			messageQueueMock
+				.Setup(m => m.EndReceive(It.IsAny<IAsyncResult>()))
+				.Callback(() =>
+				{
+					throwCount++;
+					throw CreateMessageQueueException((int)MessageQueueErrorCode.IOTimeout);
+				});
+			messageQueueMock.Setup(m => m.BeginReceive(It.IsAny<TimeSpan>()))
+				.Callback(
+					() =>
+					{
+						if (throwCount++ == 1)
+							throw CreateMessageQueueException((int)MessageQueueErrorCode.IOTimeout);
+						if (throwCount > 1)
+							throw CreateMessageQueueException((int)MessageQueueErrorCode.AccessDenied);
+						messageQueueMock.Raise(m => m.ReceiveCompleted += null,
+							new MessageQueueReceiveCompletedEventArgs(null));
+					});
+
+			using (var receiverReader = new MsmqReader<Message1>(messageQueueMock.Object, message1 => (Message1)message1.Message.Body))
+			{
+				receiverReader.AttachConsumer(new ActionConsumer<Message1>(m => { }));
+				Assert.Throws<MessageQueueException>(() => receiverReader.Start());
+			}
+		}
+
+		[Test]
+		public void TestQueueReaderWithMockMsmqWithNoConsumer()
+		{
+			var actualMessage = new Message1 { CorrelationId = "f3e608d4-96cf-4093-9923-91b13f4b7555" };
+			var messageQueueMock = new Mock<IMessageQueue>();
+			var messageMock = new MessageQueueMessageWrapper(new Message { Body = actualMessage });
+
+			messageQueueMock.Setup(m => m.EndReceive(It.IsAny<IAsyncResult>())).Returns(messageMock);
+			var beginReceiveCalled = false;
+			messageQueueMock.Setup(m => m.BeginReceive(It.IsAny<TimeSpan>()))
+				.Callback(
+					() =>
+					{
+						if (beginReceiveCalled) throw CreateMessageQueueException();
+						beginReceiveCalled = true;
+						messageQueueMock.Raise(m => m.ReceiveCompleted += null,
+							new MessageQueueReceiveCompletedEventArgs(null));
+					});
+
+			var receiverReader = new MsmqReader<Message1>(messageQueueMock.Object, message1 => (Message1)message1.Message.Body);
+			receiverReader.Start();
+
+			messageQueueMock.Verify(m => m.BeginReceive(It.IsAny<TimeSpan>()), Times.Exactly(1));
 		}
 
 		[Test, Explicit]
@@ -132,9 +295,15 @@ namespace Tests
 			}
 		}
 
-		private static MessageQueueException CreateMessageQueueException()
+		//private static MessageQueueException CreateMessageQueueException()
+		//{
+		//	return JsonConvert.DeserializeObject<MessageQueueException>("{\"NativeErrorCode\":-1072824293,\"ClassName\":\"System.Messaging.MessageQueueException\",\"Message\":\"External component has thrown an exception.\",\"Data\":null,\"InnerException\":null,\"HelpURL\":null,\"StackTraceString\":null,\"RemoteStackTraceString\":null,\"RemoteStackIndex\":0,\"ExceptionMethod\":null,\"HResult\":-2147467259,\"Source\":null,\"WatsonBuckets\":null}");
+		//}
+
+		private static MessageQueueException CreateMessageQueueException(int code = -1072824293)
 		{
-			return JsonConvert.DeserializeObject<MessageQueueException>("{\"NativeErrorCode\":-1072824293,\"ClassName\":\"System.Messaging.MessageQueueException\",\"Message\":\"External component has thrown an exception.\",\"Data\":null,\"InnerException\":null,\"HelpURL\":null,\"StackTraceString\":null,\"RemoteStackTraceString\":null,\"RemoteStackIndex\":0,\"ExceptionMethod\":null,\"HResult\":-2147467259,\"Source\":null,\"WatsonBuckets\":null}");
+			return JsonConvert.DeserializeObject<MessageQueueException>(
+				$"{{\"NativeErrorCode\":{code},\"ClassName\":\"System.Messaging.MessageQueueException\",\"Message\":\"External component has thrown an exception.\",\"Data\":null,\"InnerException\":null,\"HelpURL\":null,\"StackTraceString\":null,\"RemoteStackTraceString\":null,\"RemoteStackIndex\":0,\"ExceptionMethod\":null,\"HResult\":-2147467259,\"Source\":null,\"WatsonBuckets\":null}}");
 		}
 	}
 }

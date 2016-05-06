@@ -20,7 +20,7 @@ namespace PRI.Messaging.Patterns
 			_messageDeserializer = messageDeserializer;
 		}
 
-		internal MsmqReader(MessageQueue messageQueue, Func<Message, TMessage> messageDeserializer)
+		public MsmqReader(MessageQueue messageQueue, Func<Message, TMessage> messageDeserializer)
 		{
 			if (messageQueue == null) throw new ArgumentNullException("messageQueue");
 			_messageQueue = new MessageQueueWrapper(messageQueue);

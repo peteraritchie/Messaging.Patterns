@@ -35,12 +35,13 @@ namespace PRI.Messaging.Patterns
 
 		public void Handle(IMessage message)
 		{
+			var isEvent = message is IEvent;
 			var messageType = message.GetType();
 			Action<IMessage> consumerInvoker;
 			if (_consumerInvokers.TryGetValue(messageType.GUID, out consumerInvoker))
 			{
 				consumerInvoker(message);
-				return;
+				if(!isEvent) return;
 			}
 
 			// check base type hierarchy.
@@ -50,7 +51,7 @@ namespace PRI.Messaging.Patterns
 				if (_consumerInvokers.TryGetValue(messageType.GUID, out consumerInvoker))
 				{
 					consumerInvoker(message);
-					return;
+					if (!isEvent) return;
 				}
 				messageType = messageType.BaseType;
 			}
@@ -59,11 +60,10 @@ namespace PRI.Messaging.Patterns
 			messageType = message.GetType();
 			foreach (var interfaceType in messageType.FindInterfaces((type, criteria) => true, null))
 			{
-				if (_consumerInvokers.TryGetValue(interfaceType.GUID, out consumerInvoker))
-				{
-					consumerInvoker(message);
-					return;
-				}
+				if (!_consumerInvokers.TryGetValue(interfaceType.GUID, out consumerInvoker)) continue;
+
+				consumerInvoker(message);
+				if (!isEvent) return;
 			}
 		}
 

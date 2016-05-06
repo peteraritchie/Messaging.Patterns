@@ -33,7 +33,7 @@ namespace PRI.Messaging.Patterns
 	{
 		internal readonly Dictionary<Guid, Action<IMessage>> _consumerInvokers = new Dictionary<Guid, Action<IMessage>>();
 
-		public void Handle(IMessage message)
+		public virtual void Handle(IMessage message)
 		{
 			var isEvent = message is IEvent;
 			var messageType = message.GetType();

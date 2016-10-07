@@ -13,8 +13,8 @@ namespace PRI.Messaging.Patterns.Extensions.Bus
 {
 	public static class BusExtensions
 	{
-		private static readonly Dictionary<Patterns.Bus, Dictionary<Type, Delegate>> busResolverDictionaries = new Dictionary<Patterns.Bus, Dictionary<Type, Delegate>>();
-		private static readonly Dictionary<Patterns.Bus, IServiceLocator> busServiceLocators = new Dictionary<Patterns.Bus, IServiceLocator>();
+		private static readonly Dictionary<IBus, Dictionary<Type, Delegate>> busResolverDictionaries = new Dictionary<IBus, Dictionary<Type, Delegate>>();
+		private static readonly Dictionary<IBus, IServiceLocator> busServiceLocators = new Dictionary<IBus, IServiceLocator>();
 
 		/// <summary>
 		/// Add the ability to resolve an instance of <typeparam name="T"></typeparam>
@@ -35,14 +35,14 @@ namespace PRI.Messaging.Patterns.Extensions.Bus
 		/// <typeparam name="T">The type of instance to resolve.  Typically of type IConsumer{TMessage}</typeparam>
 		/// <param name="bus">The <seealso cref="IBus"/> instance this will apply to</param>
 		/// <param name="resolver">A delegate that returns an instance of <typeparamref name="T"/></param>
-		public static void AddResolver<T>(this Patterns.Bus bus, Func<T> resolver)
+		public static void AddResolver<T>(this IBus bus, Func<T> resolver)
 		{
 			if(!busResolverDictionaries.ContainsKey(bus)) busResolverDictionaries.Add(bus, new Dictionary<Type, Delegate>());
 			var dictionary = busResolverDictionaries[bus];
 			dictionary[typeof (T)] = resolver;
 		}
 
-		public static void SetServiceLocator(this Patterns.Bus bus, IServiceLocator serviceLocator)
+		public static void SetServiceLocator(this IBus bus, IServiceLocator serviceLocator)
 		{
 			if (bus == null) throw new ArgumentNullException(nameof(bus));
 			if (serviceLocator == null) throw new ArgumentNullException(nameof(serviceLocator));
@@ -83,7 +83,7 @@ namespace PRI.Messaging.Patterns.Extensions.Bus
 		/// <param name="directory">What directory to search</param>
 		/// <param name="wildcard">What filenames to search</param>
 		/// <param name="namespace">Include IConsumers{TMessage} within this namespace</param>
-		public static void AddHandlersAndTranslators(this Patterns.Bus bus, string directory, string wildcard, string @namespace)
+		public static void AddHandlersAndTranslators(this IBus bus, string directory, string wildcard, string @namespace)
 		{
 			if (!busResolverDictionaries.ContainsKey(bus)) busResolverDictionaries.Add(bus, new Dictionary<Type, Delegate>());
 			IServiceLocator serviceLocator = busServiceLocators.ContainsKey(bus) ? busServiceLocators[bus] : new ActivatorServiceLocator();

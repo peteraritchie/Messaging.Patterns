@@ -181,7 +181,7 @@ namespace Tests
 				await bus.RequestAsync<Message1, TheEvent, TheErrorEvent>(message1);
 			}
 				);
-			Assert.That(exception.ParamName, Is.EqualTo("bus"));
+			Assert.That(exception.ParamName, Is.EqualTo("message"));
 		}
 
 		[Test]

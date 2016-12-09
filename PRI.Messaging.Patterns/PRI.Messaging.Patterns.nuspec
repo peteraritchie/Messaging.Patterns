@@ -3,13 +3,13 @@
   <metadata>
     <id>PRI.Messaging.Patterns</id>
     <version>$version$</version>
-    <authors>Peter Ritchie</authors>
+    <authors>$author$</authors>
     <licenseUrl>https://raw.githubusercontent.com/peteraritchie/Messaging.Patterns/develop/LICENSE</licenseUrl>
     <projectUrl>https://github.com/peteraritchie/Messaging.Patterns</projectUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
-    <description>Package description</description>
-    <releaseNotes>re-targeted for .NET 4.5</releaseNotes>
-    <copyright>Copyright 2016</copyright>
+    <description>$description$</description>
+    <releaseNotes>Fixed RequestAsync recognizing event correlation id and added concept of error events to RequestAsync</releaseNotes>
+    <copyright>$copyright$</copyright>
     <tags>Messaging message-oriented events</tags>
   </metadata>
 </package>

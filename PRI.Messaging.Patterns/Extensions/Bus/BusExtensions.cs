@@ -8,6 +8,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Practices.ServiceLocation;
+using PRI.Messaging.Patterns.Exceptions;
 
 namespace PRI.Messaging.Patterns.Extensions.Bus
 {
@@ -202,6 +203,67 @@ namespace PRI.Messaging.Patterns.Extensions.Bus
 				tcs.SetResult(e);
 			});
 			bus.AddHandler(actionConsumer);
+			bus.Send(message);
+			return tcs.Task;
+		}
+
+		/// <summary>
+		/// Perform a request/response
+		/// </summary>
+		/// <typeparam name="TMessage">The type of the message being sent</typeparam>
+		/// <typeparam name="TSuccessEvent">The type of the event for the response</typeparam>
+		/// <param name="bus">The bus to send/receive from</param>
+		/// <param name="message">The message to send</param>
+		/// <param name="cancellationToken">CancellationToken to use to cancel or timeout.</param>
+		/// <returns>The event response</returns>
+		public static Task<TSuccessEvent> RequestAsync<TMessage, TSuccessEvent, TErrorEvent>(this IBus bus, TMessage message)
+			where TMessage : IMessage
+			where TSuccessEvent : IEvent
+			where TErrorEvent : IEvent
+		{
+			return RequestAsync<TMessage, TSuccessEvent, TErrorEvent>(bus, message, CancellationToken.None);
+		}
+
+		/// <summary>
+		/// Perform a request/response
+		/// </summary>
+		/// <typeparam name="TMessage">The type of the message being sent</typeparam>
+		/// <typeparam name="TSuccessEvent">The type of the event for the response</typeparam>
+		/// <param name="bus">The bus to send/receive from</param>
+		/// <param name="message">The message to send</param>
+		/// <param name="cancellationToken">CancellationToken to use to cancel or timeout.</param>
+		/// <returns>The event response</returns>
+		public static Task<TSuccessEvent> RequestAsync<TMessage, TSuccessEvent, TErrorEvent>(this IBus bus, TMessage message, CancellationToken cancellationToken) where TMessage : IMessage
+			where TSuccessEvent : IEvent
+			where TErrorEvent : IEvent
+		{
+			if (bus == null) throw new ArgumentNullException(nameof(bus));
+			if (message == null) throw new ArgumentNullException(nameof(message));
+
+			var tcs = new TaskCompletionSource<TSuccessEvent>();
+			ActionConsumer<TSuccessEvent> successActionConsumer = null;
+			ActionConsumer<TErrorEvent> errorActionConsumer = null;
+			cancellationToken.Register(() => tcs.TrySetCanceled(), useSynchronizationContext: false);
+			{
+				successActionConsumer = new ActionConsumer<TSuccessEvent>(e =>
+				{
+					if (e.CorrelationId != message.CorrelationId) return;
+					if (successActionConsumer != null) bus.RemoveHandler(successActionConsumer);
+					if (errorActionConsumer != null) bus.RemoveHandler(errorActionConsumer);
+					tcs.SetResult(e);
+				});
+				bus.AddHandler(successActionConsumer);
+			}
+			{
+				errorActionConsumer = new ActionConsumer<TErrorEvent>(e =>
+				{
+					if (e.CorrelationId != message.CorrelationId) return;
+					if (errorActionConsumer != null) bus.RemoveHandler(errorActionConsumer);
+					if (successActionConsumer != null) bus.RemoveHandler(successActionConsumer);
+					tcs.SetException(new ReceivedErrorEventException<TErrorEvent>(e));
+				});
+				bus.AddHandler(errorActionConsumer);
+			}
 			bus.Send(message);
 			return tcs.Task;
 		}

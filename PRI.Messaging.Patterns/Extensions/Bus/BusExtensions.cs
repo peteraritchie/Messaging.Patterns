@@ -94,7 +94,8 @@ namespace PRI.Messaging.Patterns.Extensions.Bus
 			{
 				var pipeImplementationInterface =
 					consumerType.GetInterfaces()
-						.FirstOrDefault(t => !t.IsGenericTypeDefinition && t.GetGenericTypeDefinition() == typeof (IPipe<,>));
+						.FirstOrDefault(t => t.IsGenericType && !t.IsGenericTypeDefinition && t.GetGenericTypeDefinition() == typeof (IPipe<,>));
+
 				if (pipeImplementationInterface != null)
 				{
 					var translatorType = consumerType;
@@ -123,7 +124,7 @@ namespace PRI.Messaging.Patterns.Extensions.Bus
 				{
 					var consumerImplementationInterface =
 						consumerType.GetInterfaces()
-							.FirstOrDefault(t => !t.IsGenericTypeDefinition && t.GetGenericTypeDefinition() == typeof (IConsumer<>));
+							.FirstOrDefault(t => t.IsGenericType && !t.IsGenericTypeDefinition && t.GetGenericTypeDefinition() == typeof (IConsumer<>));
 					Debug.Assert(consumerImplementationInterface != null,
 						"Unexpected state enumerating implementations of IConsumer<T>");
 

@@ -8,7 +8,7 @@
     <projectUrl>https://github.com/peteraritchie/Messaging.Patterns</projectUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <description>$description$</description>
-    <releaseNotes>Fixed Bus.RemoveHandler so that multi-threaded Bus.RequestAsync works correctly</releaseNotes>
+    <releaseNotes>Fixed small bug in pipe implementation detection code and ability to observe that messages are processed.</releaseNotes>
     <copyright>$copyright$</copyright>
     <tags>Messaging message-oriented events</tags>
   </metadata>

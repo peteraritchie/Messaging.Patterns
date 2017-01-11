@@ -65,6 +65,7 @@
     <Compile Include="Internal\MessageQueueMessageWrapper.cs" />
     <Compile Include="Internal\MessageQueueReceiveCompletedEventArgs.cs" />
     <Compile Include="Internal\MessageQueueWrapper.cs" />
+    <Compile Include="MessageProcessedEventArgs.cs" />
     <Compile Include="MsmqReader.cs" />
     <Compile Include="Multiplexor.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

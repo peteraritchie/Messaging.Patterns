@@ -36,14 +36,18 @@ namespace PRI.Messaging.Patterns
 		internal readonly Dictionary<Guid, Func<IMessage, Task>> _asyncConsumerInvokers = new Dictionary<Guid, Func<IMessage, Task>>();
 		internal readonly Dictionary<IMessage, Dictionary<string, string>> _outgoingMessageHeaders = new Dictionary<IMessage, Dictionary<string, string>>();
 
+		protected EventHandler<MessageProcessedEventArgs> MessageProcessed;
+
 		public virtual void Handle(IMessage message)
 		{
+			var messageProcessedHandler = MessageProcessed;
 			var isEvent = message is IEvent;
 			var messageType = message.GetType();
 			Action<IMessage> consumerInvoker;
 			if (_consumerInvokers.TryGetValue(messageType.GUID, out consumerInvoker))
 			{
 				consumerInvoker(message);
+				messageProcessedHandler?.Invoke(this, new MessageProcessedEventArgs(message));
 				if (!isEvent) return;
 			}
 
@@ -54,6 +58,7 @@ namespace PRI.Messaging.Patterns
 				if (_consumerInvokers.TryGetValue(messageType.GUID, out consumerInvoker))
 				{
 					consumerInvoker(message);
+					messageProcessedHandler?.Invoke(this, new MessageProcessedEventArgs(message));
 					if (!isEvent) return;
 				}
 				messageType = messageType.BaseType;
@@ -66,6 +71,7 @@ namespace PRI.Messaging.Patterns
 				if (!_consumerInvokers.TryGetValue(interfaceType.GUID, out consumerInvoker)) continue;
 
 				consumerInvoker(message);
+				messageProcessedHandler?.Invoke(this, new MessageProcessedEventArgs(message));
 				if (!isEvent) return;
 			}
 		}
@@ -133,17 +139,28 @@ namespace PRI.Messaging.Patterns
 			if (!_consumerInvokers.ContainsKey(typeof(TIn).GUID)) return;
 
 			var list = _consumerInvokers[typeof(TIn).GUID].GetInvocationList();
-#if DEBUG
 			var initialCount = list.Length;
-#endif
 			if (tuple.Item1 != null) _consumerInvokers[typeof(TIn).GUID] -= tuple.Item1;
 			if (!_consumerInvokers.ContainsKey(typeof(TIn).GUID)) return;
 			if (_consumerInvokers[typeof(TIn).GUID] != null)
 			{
 				list = _consumerInvokers[typeof(TIn).GUID].GetInvocationList();
+				if (initialCount == list.Length)
+				{
+					Action<IMessage> handler = CreateConsumerDelegate(consumer);
+					Delegate m =
+						list.LastOrDefault(e => e.Method.Name == handler.Method.Name && e.Target.GetType() == handler.Target.GetType());
+					if (m != null) _consumerInvokers[typeof(TIn).GUID] -= (Action<IMessage>)m;
+				}
+				if (_consumerInvokers[typeof(TIn).GUID] != null)
+				{
+					list = _consumerInvokers[typeof(TIn).GUID].GetInvocationList();
 #if DEBUG
-				Debug.Assert(initialCount != list.Length);
+					Debug.Assert(initialCount != list.Length);
 #endif
+				}
+				else
+					_consumerInvokers.Remove(typeof(TIn).GUID);
 			}
 			else
 				_consumerInvokers.Remove(typeof(TIn).GUID);
@@ -192,6 +209,7 @@ namespace PRI.Messaging.Patterns
 
 		public Task HandleAsync(IMessage message)
 		{
+			var messageProcessedHandler = MessageProcessed;
 			var isEvent = message is IEvent;
 			var messageType = message.GetType();
 			Func<IMessage, Task> consumerInvoker;
@@ -199,6 +217,7 @@ namespace PRI.Messaging.Patterns
 			if (_asyncConsumerInvokers.TryGetValue(messageType.GUID, out consumerInvoker))
 			{
 				task = consumerInvoker(message);
+				messageProcessedHandler?.Invoke(this, new MessageProcessedEventArgs(message));
 				if (!isEvent) return task;
 			}
 
@@ -209,6 +228,7 @@ namespace PRI.Messaging.Patterns
 				if (_asyncConsumerInvokers.TryGetValue(messageType.GUID, out consumerInvoker))
 				{
 					var newTask = consumerInvoker(message);
+					messageProcessedHandler?.Invoke(this, new MessageProcessedEventArgs(message));
 					if (task != null) // merge tasks
 					{
 						task = Task.WhenAll(task, newTask);
@@ -225,6 +245,7 @@ namespace PRI.Messaging.Patterns
 				if (!_asyncConsumerInvokers.TryGetValue(interfaceType.GUID, out consumerInvoker)) continue;
 
 				var newTask = consumerInvoker(message);
+				messageProcessedHandler?.Invoke(this, new MessageProcessedEventArgs(message));
 				if (task != null) // merge tasks
 				{
 					task = Task.WhenAll(task, newTask);

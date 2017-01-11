@@ -196,13 +196,14 @@ namespace PRI.Messaging.Patterns.Extensions.Bus
 			var tcs = new TaskCompletionSource<TEvent>();
 			cancellationToken.Register(() => tcs.TrySetCanceled(), useSynchronizationContext: false);
 			ActionConsumer<TEvent> actionConsumer = null;
+			object token = null;
 			actionConsumer = new ActionConsumer<TEvent>(e =>
 			{
 				if (e.CorrelationId != message.CorrelationId) return;
-				if (actionConsumer != null) bus.RemoveHandler(actionConsumer);
+				if (actionConsumer != null) bus.RemoveHandler(actionConsumer, token);
 				tcs.SetResult(e);
 			});
-			bus.AddHandler(actionConsumer);
+			token = bus.AddHandler(actionConsumer);
 			bus.Send(message);
 			return tcs.Task;
 		}
@@ -243,26 +244,27 @@ namespace PRI.Messaging.Patterns.Extensions.Bus
 			var tcs = new TaskCompletionSource<TSuccessEvent>();
 			ActionConsumer<TSuccessEvent> successActionConsumer = null;
 			ActionConsumer<TErrorEvent> errorActionConsumer = null;
+			object token = null;
 			cancellationToken.Register(() => tcs.TrySetCanceled(), useSynchronizationContext: false);
 			{
 				successActionConsumer = new ActionConsumer<TSuccessEvent>(e =>
 				{
 					if (e.CorrelationId != message.CorrelationId) return;
-					if (successActionConsumer != null) bus.RemoveHandler(successActionConsumer);
-					if (errorActionConsumer != null) bus.RemoveHandler(errorActionConsumer);
+					if (successActionConsumer != null) bus.RemoveHandler(successActionConsumer, token);
+					if (errorActionConsumer != null) bus.RemoveHandler(errorActionConsumer, token);
 					tcs.SetResult(e);
 				});
-				bus.AddHandler(successActionConsumer);
+				token = bus.AddHandler(successActionConsumer);
 			}
 			{
 				errorActionConsumer = new ActionConsumer<TErrorEvent>(e =>
 				{
 					if (e.CorrelationId != message.CorrelationId) return;
-					if (errorActionConsumer != null) bus.RemoveHandler(errorActionConsumer);
-					if (successActionConsumer != null) bus.RemoveHandler(successActionConsumer);
+					if (errorActionConsumer != null) bus.RemoveHandler(errorActionConsumer, token);
+					if (successActionConsumer != null) bus.RemoveHandler(successActionConsumer, token);
 					tcs.SetException(new ReceivedErrorEventException<TErrorEvent>(e));
 				});
-				bus.AddHandler(errorActionConsumer);
+				token = bus.AddHandler(errorActionConsumer);
 			}
 			bus.Send(message);
 			return tcs.Task;

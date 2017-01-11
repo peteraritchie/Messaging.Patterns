@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using NUnit.Framework;
 using PRI.Messaging.Patterns;
+using PRI.Messaging.Patterns.Extensions.Bus;
 using PRI.Messaging.Primitives;
 using Tests.Mocks;
 
@@ -121,6 +122,20 @@ namespace Tests
 			Message1 receivedMessage1 = null;
 			bus.AddHandler(new ActionConsumer<Message1>(m => receivedMessage1 = m));
 			bus.RemoveHandler(new ActionConsumer<Message1>(m => receivedMessage1 = m));
+		}
+
+		[Test]
+		public void InterleavedRemoveHandlerRemovesCorrectHandler()
+		{
+			string ordinal = null;
+			var bus = new Bus();
+			var actionConsumer1 = new ActionConsumer<Message1>(m => ordinal = "1");
+			var token1 = bus.AddHandler(actionConsumer1);
+			var actionConsumer2 = new ActionConsumer<Message1>(m => ordinal = "2");
+			var token2 = bus.AddHandler(actionConsumer2);
+			bus.RemoveHandler(actionConsumer1, token1);
+			bus.Send(new Message1());
+			Assert.AreEqual("2", ordinal);
 		}
 	}
 }

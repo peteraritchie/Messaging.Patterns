@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 14
-VisualStudioVersion = 14.0.25123.0
+VisualStudioVersion = 14.0.25420.1
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PRI.Messaging.Patterns", "PRI.Messaging.Patterns\PRI.Messaging.Patterns.csproj", "{57C7BDFE-9AA5-4BFE-9B29-5B7AE2E2EBD0}"
 EndProject
@@ -21,6 +21,11 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "github", "github", "{F689C6
 		appveyor.yml = appveyor.yml
 		LICENSE = LICENSE
 		README.md = README.md
+	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{9D96C45A-F2F8-4DB4-AAA6-EC96BB264A8C}"
+	ProjectSection(SolutionItems) = preProject
+		PRI.Messaging.Patterns\PRI.Messaging.Patterns.nuspec = PRI.Messaging.Patterns\PRI.Messaging.Patterns.nuspec
 	EndProjectSection
 EndProject
 Global

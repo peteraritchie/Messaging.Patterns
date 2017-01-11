@@ -1,4 +1,5 @@
-﻿using NUnit.Framework;
+﻿using System.Threading.Tasks;
+using NUnit.Framework;
 using PRI.Messaging.Patterns;
 using PRI.Messaging.Primitives;
 using Tests.Mocks;
@@ -11,23 +12,23 @@ namespace Tests
 	//	creating a queue reader QueueReaderTest
 	//	creating a queue reader that discovers consumers?
 	[TestFixture]
-    public class ManuallyComposingBus
-    {
+	public class ManuallyComposingBus
+	{
 		public ManuallyComposingBus()
 		{
 			Pipe.LastMessageProcessed = null;
 		}
 
 		[Test]
-		public void ManuallyComposedTypeHandlesMessageProperly()
+		public void ManuallyComposedTypeSynchronouslyHandlesMessageProperly()
 		{
-			var message1 = new Message1 { CorrelationId = "1234" };
+			var message1 = new Message1 {CorrelationId = "1234"};
 
 			var bus = new Bus();
 
 			var message2Consumer = new Message2Consumer();
 			bus.AddHandler(message2Consumer);
-			
+
 			var pipe = new Pipe();
 			bus.AddTranslator(pipe);
 
@@ -39,9 +40,66 @@ namespace Tests
 		}
 
 		[Test]
+		public void ManuallyComposedSyncAsyncTypeSynchronouslyHandlesMessageWithAsyncConsumerProperly()
+		{
+			var message2 = new Message2 {CorrelationId = "1234"};
+
+			var bus = new Bus();
+
+			var message3Consumer = new Message3AsyncConsumer();
+			bus.AddHandler(message3Consumer);
+
+			var pipe = new Pipe23();
+			bus.AddTranslator(pipe);
+
+			bus.Handle(message2);
+
+			Assert.AreSame(message2, Pipe23.LastMessageProcessed);
+			Assert.IsNotNull(Message3AsyncConsumer.LastMessageReceived);
+			Assert.AreEqual(message2.CorrelationId, Message3AsyncConsumer.LastMessageReceived.CorrelationId);
+		}
+
+
+		[Test]
+		public async Task ManuallyComposedSyncAsyncTypeAsynchronouslyHandlesMessageProperly()
+		{
+			var message2 = new Message2 { CorrelationId = "1234" };
+
+			var bus = new Bus();
+
+			var message3AsyncConsumer = new Message3AsyncConsumer();
+			bus.AddHandler(message3AsyncConsumer);
+
+			var pipe = new Pipe23();
+			bus.AddTranslator(pipe);
+
+			await bus.HandleAsync(message2);
+
+			Assert.AreSame(message2, Pipe23.LastMessageProcessed);
+			Assert.IsNotNull(Message3AsyncConsumer.LastMessageReceived);
+			Assert.AreEqual(message2.CorrelationId, Message3AsyncConsumer.LastMessageReceived.CorrelationId);
+		}
+
+		[Test]
+		public async Task ManuallyComposedAsyncTypeAsynchronouslyHandlesMessageProperly()
+		{
+			var message3 = new Message3 { CorrelationId = "1234" };
+
+			var bus = new Bus();
+
+			var message3AsyncConsumer = new Message3AsyncConsumer();
+			bus.AddHandler(message3AsyncConsumer);
+
+			await bus.HandleAsync(message3);
+
+			Assert.IsNotNull(Message3AsyncConsumer.LastMessageReceived);
+			Assert.AreEqual(message3.CorrelationId, Message3AsyncConsumer.LastMessageReceived.CorrelationId);
+		}
+
+		[Test]
 		public void ManuallyComposedWithTranslatorFirstTypeHandlesMessageProperly()
 		{
-			var message1 = new Message1 { CorrelationId = "1234" };
+			var message1 = new Message1 {CorrelationId = "1234"};
 
 			var bus = new Bus();
 
@@ -58,12 +116,12 @@ namespace Tests
 			Assert.AreEqual(message1.CorrelationId, Message2Consumer.LastMessageReceived.CorrelationId);
 		}
 
-		public class Message3 : PRI.Messaging.Primitives.IMessage
+		public class Message4 : PRI.Messaging.Primitives.IMessage
 		{
 			public string CorrelationId { get; set; }
 		}
 
-		public class Message4 : Message3
+		public class Message5 : Message4
 		{
 		}
 
@@ -77,23 +135,23 @@ namespace Tests
 		[Test]
 		public void ManuallyComposedTypeWithMultipleTranslatorsHandlesMessageProperly()
 		{
-			var message3 = new Message3 { CorrelationId = "1234" };
+			var message4 = new Message4 {CorrelationId = "1234"};
 
 			var bus = new Bus();
-			Message4 message4 = null;
+			Message5 message5 = null;
 			var message2Consumer = new MyConsumer();
 			bus.AddHandler(message2Consumer);
-			bus.AddHandler(new ActionConsumer<Message4>(m=>message4 = m));
+			bus.AddHandler(new ActionConsumer<Message5>(m => message5 = m));
 			var pipe = new Pipe();
 			bus.AddTranslator(pipe);
-			bus.AddTranslator(new ActionPipe<Message3, Message4>(m=>new Message4 {CorrelationId = m.CorrelationId}));
+			bus.AddTranslator(new ActionPipe<Message4, Message5>(m => new Message5 {CorrelationId = m.CorrelationId}));
 
-			bus.Handle(message3);
+			bus.Handle(message4);
 
-			Assert.IsNotNull(message4);
-			Assert.AreEqual(message3.CorrelationId, message4.CorrelationId);
+			Assert.IsNotNull(message5);
+			Assert.AreEqual(message4.CorrelationId, message5.CorrelationId);
 			Assert.IsNotNull(Pipe.LastMessageProcessed);
-			Assert.AreEqual(message3.CorrelationId, message4.CorrelationId);
+			Assert.AreEqual(message4.CorrelationId, message5.CorrelationId);
 		}
 
 		[Test]
@@ -105,7 +163,7 @@ namespace Tests
 			bus.AddHandler(message2Consumer);
 			bus.AddHandler(message2Consumer);
 
-			var message1 = new Message2 { CorrelationId = "1234" };
+			var message1 = new Message2 {CorrelationId = "1234"};
 			bus.Handle(message1);
 			Assert.AreEqual(2, message2Consumer.MessageReceivedCount);
 		}
@@ -120,7 +178,7 @@ namespace Tests
 			bus.AddHandler(message2Consumer);
 			bus.RemoveHandler(message2Consumer);
 
-			var message1 = new Message2 { CorrelationId = "1234" };
+			var message1 = new Message2 {CorrelationId = "1234"};
 			bus.Handle(message1);
 			Assert.AreEqual(1, message2Consumer.MessageReceivedCount);
 		}

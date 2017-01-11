@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel.Composition;
 using System.ComponentModel.Composition.Hosting;
 using System.IO;
+using System.Threading.Tasks;
 using Microsoft.Mef.CommonServiceLocator;
 using Microsoft.Practices.ServiceLocation;
 using NUnit.Framework;
@@ -67,7 +68,10 @@ namespace Tests
 			var compositionContainer = new CompositionContainer(catalog);
 			var message2Consumer = new Message2Consumer();
 			compositionContainer.ComposeExportedValue(message2Consumer);
+			var message3AsyncConsumer = new Message3AsyncConsumer();
+			compositionContainer.ComposeExportedValue(message3AsyncConsumer);
 			compositionContainer.ComposeExportedValue(new Pipe());
+			compositionContainer.ComposeExportedValue(new Pipe23());
 			ServiceLocator.SetLocatorProvider(() => new MefServiceLocator(compositionContainer));
 
 			#endregion
@@ -113,7 +117,10 @@ namespace Tests
 
 			bus.SetServiceLocator(new MefServiceLocator(compositionContainer));
 			compositionContainer.ComposeExportedValue(message2Consumer);
+			var message3AsyncConsumer = new Message3AsyncConsumer();
+			compositionContainer.ComposeExportedValue(message3AsyncConsumer);
 			compositionContainer.ComposeExportedValue(new Pipe());
+			compositionContainer.ComposeExportedValue(new Pipe23());
 			bus.SetServiceLocator(new MefServiceLocator(compositionContainer));
 
 			var directory = Path.GetDirectoryName(new Uri(GetType().Assembly.CodeBase).LocalPath);
@@ -161,7 +168,7 @@ namespace Tests
 			var directory = Path.GetDirectoryName(new Uri(GetType().Assembly.CodeBase).LocalPath);
 			bus.AddHandlersAndTranslators(directory, "Tests*.dll", "Tests.Mocks");
 
-			Assert.AreEqual(2, bus._consumerInvokers.Count);
+			Assert.AreEqual(3, bus._consumerInvokers.Count);
 		}
 
 		[Test]
@@ -171,6 +178,7 @@ namespace Tests
 			var directory = Path.GetDirectoryName(new Uri(GetType().Assembly.CodeBase).LocalPath);
 			bus.AddHandlersAndTranslators(directory, "Tests*.dll", GetType().Namespace);
 
+			Assert.IsTrue(bus._consumerInvokers.ContainsKey(typeof(Message3).GUID));
 			Assert.IsTrue(bus._consumerInvokers.ContainsKey(typeof(Message2).GUID));
 			Assert.IsTrue(bus._consumerInvokers.ContainsKey(typeof(Message1).GUID));
 		}
@@ -188,6 +196,34 @@ namespace Tests
 			Assert.AreSame(message1, Pipe.LastMessageProcessed);
 			Assert.IsNotNull(Message2Consumer.LastMessageReceived);
 			Assert.AreEqual(message1.CorrelationId, Message2Consumer.LastMessageReceived.CorrelationId);
+		}
+
+		[Test]
+		public async Task DiscoveredBusAsynchronousConsumerAsynchronouslyConsumesCorrectly()
+		{
+			var bus = new Bus();
+			var directory = Path.GetDirectoryName(new Uri(GetType().Assembly.CodeBase).LocalPath);
+			bus.AddHandlersAndTranslators(directory, "Tests*.dll", GetType().Namespace);
+
+			var message3 = new Message3 { CorrelationId = "1234" };
+			await bus.HandleAsync(message3);
+
+			Assert.IsNotNull(Message3AsyncConsumer.LastMessageReceived);
+			Assert.AreEqual(message3.CorrelationId, Message3AsyncConsumer.LastMessageReceived.CorrelationId);
+		}
+
+		[Test]
+		public void DiscoveredBusAsynchronousConsumerSynchronouslyConsumesCorrectly()
+		{
+			var bus = new Bus();
+			var directory = Path.GetDirectoryName(new Uri(GetType().Assembly.CodeBase).LocalPath);
+			bus.AddHandlersAndTranslators(directory, "Tests*.dll", GetType().Namespace);
+
+			var message3 = new Message3 { CorrelationId = "1234" };
+			bus.Handle(message3);
+
+			Assert.IsNotNull(Message3AsyncConsumer.LastMessageReceived);
+			Assert.AreEqual(message3.CorrelationId, Message3AsyncConsumer.LastMessageReceived.CorrelationId);
 		}
 	}
 }

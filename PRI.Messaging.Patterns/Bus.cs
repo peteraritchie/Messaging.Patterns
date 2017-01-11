@@ -141,7 +141,9 @@ namespace PRI.Messaging.Patterns
 			if (_consumerInvokers[typeof(TIn).GUID] != null)
 			{
 				list = _consumerInvokers[typeof(TIn).GUID].GetInvocationList();
+#if DEBUG
 				Debug.Assert(initialCount != list.Length);
+#endif
 			}
 			else
 				_consumerInvokers.Remove(typeof(TIn).GUID);

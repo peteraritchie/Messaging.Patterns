@@ -200,9 +200,16 @@ namespace PRI.Messaging.Patterns.Extensions.Bus
 			object token = null;
 			actionConsumer = new ActionConsumer<TEvent>(e =>
 			{
-				if (e.CorrelationId != message.CorrelationId) return;
-				if (actionConsumer != null) bus.RemoveHandler(actionConsumer, token);
-				tcs.SetResult(e);
+				try
+				{
+					if (e.CorrelationId != message.CorrelationId) return;
+					if (actionConsumer != null) bus.RemoveHandler(actionConsumer, token);
+					tcs.SetResult(e);
+				}
+				catch (Exception ex)
+				{
+					tcs.SetException(ex);
+				}
 			});
 			token = bus.AddHandler(actionConsumer);
 			bus.Send(message);

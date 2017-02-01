@@ -195,9 +195,13 @@ namespace PRI.Messaging.Patterns.Extensions.Bus
 			if (message == null) throw new ArgumentNullException(nameof(message));
 
 			var tcs = new TaskCompletionSource<TEvent>();
-			cancellationToken.Register(() => tcs.TrySetCanceled(), useSynchronizationContext: false);
 			ActionConsumer<TEvent> actionConsumer = null;
 			object token = null;
+			cancellationToken.Register(() =>
+			{
+				if (actionConsumer != null) bus.RemoveHandler(actionConsumer, token);
+				tcs.TrySetCanceled();
+			}, useSynchronizationContext: false);
 			actionConsumer = new ActionConsumer<TEvent>(e =>
 			{
 				try
@@ -254,7 +258,12 @@ namespace PRI.Messaging.Patterns.Extensions.Bus
 			ActionConsumer<TErrorEvent> errorActionConsumer = null;
 			object successToken = null;
 			object errorToken = null;
-			cancellationToken.Register(() => tcs.TrySetCanceled(), useSynchronizationContext: false);
+			cancellationToken.Register(() =>
+			{
+				if (successActionConsumer != null) bus.RemoveHandler(successActionConsumer, successToken);
+				if (errorActionConsumer != null) bus.RemoveHandler(errorActionConsumer, errorToken);
+				tcs.TrySetCanceled();
+			}, useSynchronizationContext: false);
 			{
 				successActionConsumer = new ActionConsumer<TSuccessEvent>(e =>
 				{

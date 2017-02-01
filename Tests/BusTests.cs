@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Threading.Tasks;
 using NUnit.Framework;
 using PRI.Messaging.Patterns;
 using PRI.Messaging.Patterns.Extensions.Bus;
@@ -25,6 +26,16 @@ namespace Tests
 			Assert.AreSame(message1, receivedMessage);
 			Assert.IsNotNull(receivedMessage);
 			Assert.AreEqual(message1.CorrelationId, receivedMessage.CorrelationId);
+		}
+
+		[Test]
+		public void MultipleAsyncHandlersOfSameMessageDoesntThrow()
+		{
+			using (var bus = new Bus())
+			{
+				bus.AddHandler(new AsyncActionConsumer<Message1>(m => Task.FromResult(0)));
+				bus.AddHandler(new AsyncActionConsumer<Message1>(m => Task.FromResult(1)));
+			}
 		}
 
 		public class TheEvent : IEvent
@@ -136,6 +147,23 @@ namespace Tests
 			bus.RemoveHandler(actionConsumer1, token1);
 			bus.Send(new Message1());
 			Assert.AreEqual("2", ordinal);
+		}
+
+		[Test]
+		public void RemoveHandlerWithNullTokenThrows()
+		{
+			var bus = new Bus();
+			Assert.Throws<InvalidOperationException>(() => bus.RemoveHandler(new ActionConsumer<Message1>(m => { }), null));
+		}
+
+		[Test]
+		public void RemoveHandlerTwiceSucceeds()
+		{
+			var bus = new Bus();
+			var actionConsumer1 = new ActionConsumer<Message1>(m => { });
+			var token1 = bus.AddHandler(actionConsumer1);
+			bus.RemoveHandler(actionConsumer1, token1);
+			bus.RemoveHandler(actionConsumer1, token1);
 		}
 	}
 }

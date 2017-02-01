@@ -8,7 +8,7 @@
     <projectUrl>https://github.com/peteraritchie/Messaging.Patterns</projectUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <description>$description$</description>
-    <releaseNotes>Added slim locking to Bus</releaseNotes>
+    <releaseNotes>Fixed bug with RequestAsync and cancelled tokens and task completed exception</releaseNotes>
     <copyright>$copyright$</copyright>
     <tags>Messaging message-oriented events</tags>
   </metadata>

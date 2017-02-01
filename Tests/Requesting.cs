@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Moq;
 using NUnit.Framework;
 using PRI.Messaging.Patterns;
 using PRI.Messaging.Patterns.Exceptions;
@@ -23,6 +24,45 @@ namespace Tests
 		}
 
 		[Test]
+		public async Task RequestWithExceptionDuringEventThrows()
+		{
+			IBus bus = new Bus();
+			var mockEvent = new Mock<IEvent>();
+			mockEvent.SetupGet(m => m.CorrelationId).Throws<InvalidOperationException>();
+			bus.AddHandler(new ActionConsumer<Message1>(m => bus.Publish(mockEvent.Object)));
+			Assert.ThrowsAsync<InvalidOperationException>(async () =>
+			{
+				await bus.RequestAsync<Message1, IEvent>(new Message1 {CorrelationId = "12344321"});
+			});
+		}
+
+		[Test]
+		public async Task RequestWithErrorWithExceptionDuringSuccessEventThrows()
+		{
+			IBus bus = new Bus();
+			var mockEvent = new Mock<IEvent>();
+			mockEvent.SetupGet(m => m.CorrelationId).Throws<InvalidOperationException>();
+			bus.AddHandler(new ActionConsumer<Message1>(m => bus.Publish(mockEvent.Object)));
+			Assert.ThrowsAsync<InvalidOperationException>(async () =>
+			{
+				await bus.RequestAsync<Message1, IEvent, TheErrorEvent>(new Message1 { CorrelationId = "12344321" });
+			});
+		}
+
+		[Test]
+		public async Task RequestWithErrorWithExceptionDuringErrorEventThrows()
+		{
+			IBus bus = new Bus();
+			var mockEvent = new Mock<IEvent>();
+			mockEvent.SetupGet(m => m.CorrelationId).Throws<InvalidOperationException>();
+			bus.AddHandler(new ActionConsumer<Message1>(m => bus.Publish(mockEvent.Object)));
+			Assert.ThrowsAsync<InvalidOperationException>(async () =>
+			{
+				await bus.RequestAsync<Message1, TheEvent, IEvent>(new Message1 { CorrelationId = "12344321" });
+			});
+		}
+
+		[Test]
 		public async Task RequestWithDifferentCorrelationIdDoesNotSucceed()
 		{
 			IBus bus = new Bus();
@@ -32,6 +72,34 @@ namespace Tests
 			{
 				var response = await bus.RequestAsync<Message1, TheEvent>(
 					new Message1 {CorrelationId = "12344321"},
+					cancellationTokenSource.Token);
+			});
+		}
+
+		[Test]
+		public async Task RequestWithErrorEventWithErrorEventDifferentCorrelationIdDoesNotSucceed()
+		{
+			IBus bus = new Bus();
+			bus.AddHandler(new ActionConsumer<Message1>(m => bus.Publish(new TheErrorEvent { CorrelationId = "0" })));
+			var cancellationTokenSource = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
+			Assert.ThrowsAsync<TaskCanceledException>(async () =>
+			{
+				var response = await bus.RequestAsync<Message1, TheEvent, TheErrorEvent>(
+					new Message1 { CorrelationId = "12344321" },
+					cancellationTokenSource.Token);
+			});
+		}
+
+		[Test]
+		public async Task RequestWithErrorEventWithSuccessEventWithDifferentCorrelationIdDoesNotSucceed()
+		{
+			IBus bus = new Bus();
+			bus.AddHandler(new ActionConsumer<Message1>(m => bus.Publish(new TheEvent { CorrelationId = "0" })));
+			var cancellationTokenSource = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
+			Assert.ThrowsAsync<TaskCanceledException>(async () =>
+			{
+				var response = await bus.RequestAsync<Message1, TheEvent, TheErrorEvent>(
+					new Message1 { CorrelationId = "12344321" },
 					cancellationTokenSource.Token);
 			});
 		}
@@ -122,6 +190,42 @@ namespace Tests
 					cancellationTokenSource.Token);
 			}
 				);
+		}
+		[Test]
+		public void MessageAfterRequestCancellationDoesNotThrow()
+		{
+			IBus bus = new Bus();
+			bus.AddHandler(new ActionConsumer<Message1>(m =>
+			{
+				/* do nothing */
+			}));
+
+			var cancellationTokenSource = new CancellationTokenSource();
+			var requestAsync = bus.RequestAsync<Message1, TheEvent>(
+				new Message1 { CorrelationId = "12344321" },
+				cancellationTokenSource.Token);
+			cancellationTokenSource.Cancel();
+			//await requestAsync;
+			bus.Handle(new TheEvent { CorrelationId = "12344321" });
+		}
+
+
+		[Test]
+		public void MessageAfterRequestWithErrorEventCancellationDoesNotThrow()
+		{
+			IBus bus = new Bus();
+			bus.AddHandler(new ActionConsumer<Message1>(m =>
+			{
+				/* do nothing */
+			}));
+
+			var cancellationTokenSource = new CancellationTokenSource();
+			var requestAsync = bus.RequestAsync<Message1, TheEvent, TheErrorEvent>(
+				new Message1 {CorrelationId = "12344321"},
+				cancellationTokenSource.Token);
+			cancellationTokenSource.Cancel();
+			//await requestAsync;
+			bus.Handle(new TheEvent {CorrelationId = "12344321"});
 		}
 
 		[Test]

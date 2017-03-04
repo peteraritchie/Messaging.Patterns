@@ -42,6 +42,7 @@ namespace PRI.Messaging.Patterns
 		internal readonly Dictionary<IMessage, Dictionary<string, string>> _outgoingMessageHeaders = new Dictionary<IMessage, Dictionary<string, string>>();
 #endif
 
+		[Obsolete("Event seems unreliable when multi-threaded; use new overload Handle(IMessage, out wasProcessed)")]
 		protected EventHandler<MessageProcessedEventArgs> MessageProcessed;
 
 		private ReaderWriterLockSlim _readerWriterConsumersLock = new ReaderWriterLockSlim();

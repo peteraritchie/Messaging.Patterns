@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+#if DEBUG
 using System.Diagnostics;
+#endif
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
@@ -40,12 +42,13 @@ namespace PRI.Messaging.Patterns
 		internal readonly Dictionary<IMessage, Dictionary<string, string>> _outgoingMessageHeaders = new Dictionary<IMessage, Dictionary<string, string>>();
 #endif
 
+		[Obsolete("Event seems unreliable when multi-threaded; use new overload Handle(IMessage, out wasProcessed)")]
 		protected EventHandler<MessageProcessedEventArgs> MessageProcessed;
 
 		private ReaderWriterLockSlim _readerWriterConsumersLock = new ReaderWriterLockSlim();
 		private ReaderWriterLockSlim _readerWriterAsyncConsumersLock = new ReaderWriterLockSlim();
 
-		public virtual void Handle(IMessage message)
+		protected virtual void Handle(IMessage message, out bool wasProcessed)
 		{
 			var messageProcessedHandler = MessageProcessed;
 			var isEvent = message is IEvent;
@@ -61,9 +64,12 @@ namespace PRI.Messaging.Patterns
 			{
 				_readerWriterConsumersLock.ExitReadLock();
 			}
+
+			wasProcessed = false;
 			if (consumerExists)
 			{
 				consumerInvoker(message);
+				wasProcessed = true;
 				messageProcessedHandler?.Invoke(this, new MessageProcessedEventArgs(message));
 				if (!isEvent) return;
 			}
@@ -109,6 +115,12 @@ namespace PRI.Messaging.Patterns
 				messageProcessedHandler?.Invoke(this, new MessageProcessedEventArgs(message));
 				if (!isEvent) return;
 			}
+		}
+
+		public virtual void Handle(IMessage message)
+		{
+			bool wasProcessed;
+			Handle(message, out wasProcessed);
 		}
 
 		public void AddTranslator<TIn, TOut>(IPipe<TIn, TOut> pipe) where TIn : IMessage where TOut : IMessage
@@ -205,35 +217,75 @@ namespace PRI.Messaging.Patterns
 			var tuple = tag as Tuple<Action<IMessage>, Func<IMessage, Task>>;
 			if (tuple == null) throw new InvalidOperationException();
 
-			bool hasConsumerType;
-			_readerWriterConsumersLock.EnterReadLock();
+			_readerWriterConsumersLock.EnterUpgradeableReadLock();
 			try
 			{
-				hasConsumerType = _consumerInvokers.ContainsKey(typeof(TIn).GUID);
+				var hasConsumerType = _consumerInvokers.ContainsKey(typeof(TIn).GUID);
+				if (!hasConsumerType) return;
+
+				_readerWriterConsumersLock.EnterWriteLock(); // TODO: optimize, make more granular below?
+				try
+				{
+					var list = _consumerInvokers[typeof(TIn).GUID].GetInvocationList();
+					var initialCount = list.Length;
+					if (tuple.Item1 != null) _consumerInvokers[typeof(TIn).GUID] -= tuple.Item1;
+					if (!_consumerInvokers.ContainsKey(typeof(TIn).GUID)) return;
+					if (_consumerInvokers[typeof(TIn).GUID] != null)
+					{
+						list = _consumerInvokers[typeof(TIn).GUID].GetInvocationList();
+						if (initialCount == list.Length)
+						{
+							Action<IMessage> handler = CreateConsumerDelegate(consumer);
+							Delegate m =
+								list.LastOrDefault(e => e.Method.Name == handler.Method.Name && e.Target.GetType() == handler.Target.GetType());
+							if (m != null) _consumerInvokers[typeof(TIn).GUID] -= (Action<IMessage>) m;
+						}
+						if (_consumerInvokers[typeof(TIn).GUID] != null)
+						{
+							list = _consumerInvokers[typeof(TIn).GUID].GetInvocationList();
+#if DEBUG
+						Debug.Assert(initialCount != list.Length);
+#endif
+						}
+						else
+							_consumerInvokers.Remove(typeof(TIn).GUID);
+					}
+					else
+						_consumerInvokers.Remove(typeof(TIn).GUID);
+
+				}
+				finally
+				{
+					_readerWriterConsumersLock.ExitWriteLock();
+				}
 			}
 			finally
 			{
-				_readerWriterConsumersLock.ExitReadLock();
+				_readerWriterConsumersLock.ExitUpgradeableReadLock();
 			}
-			if (!hasConsumerType) return;
+		}
 
-			_readerWriterConsumersLock.EnterWriteLock(); // TODO: optimize, make more granular below?
+		[Obsolete]
+		public void RemoveHandler<TIn>(IConsumer<TIn> consumer) where TIn : IMessage
+		{
+			_readerWriterConsumersLock.EnterUpgradeableReadLock();
 			try
 			{
-				var list = _consumerInvokers[typeof(TIn).GUID].GetInvocationList();
-				var initialCount = list.Length;
-				if (tuple.Item1 != null) _consumerInvokers[typeof(TIn).GUID] -= tuple.Item1;
-				if (!_consumerInvokers.ContainsKey(typeof(TIn).GUID)) return;
-				if (_consumerInvokers[typeof(TIn).GUID] != null)
+				var hasConsumerType = _consumerInvokers.ContainsKey(typeof(TIn).GUID);
+				if (!hasConsumerType) return;
+
+				_readerWriterConsumersLock.EnterWriteLock(); //TODO: optimize, make more granular below?
+				try
 				{
-					list = _consumerInvokers[typeof(TIn).GUID].GetInvocationList();
-					if (initialCount == list.Length)
-					{
-						Action<IMessage> handler = CreateConsumerDelegate(consumer);
-						Delegate m =
-							list.LastOrDefault(e => e.Method.Name == handler.Method.Name && e.Target.GetType() == handler.Target.GetType());
-						if (m != null) _consumerInvokers[typeof(TIn).GUID] -= (Action<IMessage>)m;
-					}
+					var list = _consumerInvokers[typeof(TIn).GUID].GetInvocationList();
+#if DEBUG
+					var initialCount = list.Length;
+#endif
+					Action<IMessage> handler = CreateConsumerDelegate(consumer);
+					Delegate m =
+						list.LastOrDefault(e => e.Method.Name == handler.Method.Name && e.Target.GetType() == handler.Target.GetType());
+					if (m != null) _consumerInvokers[typeof(TIn).GUID] -= (Action<IMessage>) m;
+					if (!_consumerInvokers.ContainsKey(typeof(TIn).GUID)) return;
 					if (_consumerInvokers[typeof(TIn).GUID] != null)
 					{
 						list = _consumerInvokers[typeof(TIn).GUID].GetInvocationList();
@@ -244,53 +296,16 @@ namespace PRI.Messaging.Patterns
 					else
 						_consumerInvokers.Remove(typeof(TIn).GUID);
 				}
-				else
-					_consumerInvokers.Remove(typeof(TIn).GUID);
-
+				finally
+				{
+					_readerWriterConsumersLock.ExitWriteLock();
+				}
 			}
 			finally
 			{
-				_readerWriterConsumersLock.ExitWriteLock();
+				_readerWriterConsumersLock.ExitUpgradeableReadLock();
 			}
 		}
-
-		[Obsolete]
-		public void RemoveHandler<TIn>(IConsumer<TIn> consumer) where TIn : IMessage
-		{
-			bool hasConsumerType;
-			_readerWriterConsumersLock.EnterReadLock();
-			try
-			{
-				hasConsumerType = _consumerInvokers.ContainsKey(typeof(TIn).GUID);
-			}
-			finally
-			{
-				_readerWriterConsumersLock.ExitReadLock();
-			}
-			if (!hasConsumerType) return;
-
-			_readerWriterConsumersLock.EnterWriteLock(); //TODO: optimize, make more granular below?
-			try
-			{
-				var list = _consumerInvokers[typeof(TIn).GUID].GetInvocationList();
-				var initialCount = list.Length;
-				Action<IMessage> handler = CreateConsumerDelegate(consumer);
-				Delegate m =
-					list.LastOrDefault(e => e.Method.Name == handler.Method.Name && e.Target.GetType() == handler.Target.GetType());
-				if (m != null) _consumerInvokers[typeof(TIn).GUID] -= (Action<IMessage>)m;
-				if (!_consumerInvokers.ContainsKey(typeof(TIn).GUID)) return;
-				if (_consumerInvokers[typeof(TIn).GUID] != null)
-				{
-					list = _consumerInvokers[typeof(TIn).GUID].GetInvocationList();
-					Debug.Assert(initialCount != list.Length);
-				}
-				else
-					_consumerInvokers.Remove(typeof(TIn).GUID);
-			}
-			finally
-			{
-				_readerWriterConsumersLock.ExitWriteLock();
-			}		}
 
 #if in_progress
 		ThreadLocal<Dictionary<string,string>> currentMessageDictionary = new ThreadLocal<Dictionary<string, string>>();
@@ -383,12 +398,9 @@ namespace PRI.Messaging.Patterns
 				if (!isEvent) return task;
 			}
 
-			if (task == null)
-			{
-				Handle(message); // if no async handlers, handle synchronously
-				return Task.FromResult(true); // TODO: Replace with Task.CompletedTask in .NET 4.6+
-			}
-			return task;
+			if (task != null) return task;
+			Handle(message); // if no async handlers, handle synchronously
+			return Task.FromResult(true); // TODO: Replace with Task.CompletedTask in .NET 4.6+
 		}
 
 		public void Dispose()

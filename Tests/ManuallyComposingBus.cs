@@ -116,6 +116,28 @@ namespace Tests
 			Assert.AreEqual(message1.CorrelationId, Message2Consumer.LastMessageReceived.CorrelationId);
 		}
 
+		[Test]
+		public void ManuallyComposedWithTwoTranslatorsFirstTypeHandlesMessageProperly()
+		{
+			var message1 = new Message1 { CorrelationId = "1234" };
+
+			var bus = new Bus();
+
+			var pipe1 = new Pipe();
+			bus.AddTranslator(pipe1);
+			var pipe2 = new Pipe();
+			bus.AddTranslator(pipe1);
+
+			var message2Consumer = new Message2Consumer();
+			bus.AddHandler(message2Consumer);
+
+			bus.Handle(message1);
+
+			Assert.AreSame(message1, Pipe.LastMessageProcessed);
+			Assert.IsNotNull(Message2Consumer.LastMessageReceived);
+			Assert.AreEqual(message1.CorrelationId, Message2Consumer.LastMessageReceived.CorrelationId);
+		}
+
 		public class Message4 : PRI.Messaging.Primitives.IMessage
 		{
 			public string CorrelationId { get; set; }
@@ -168,21 +190,22 @@ namespace Tests
 			Assert.AreEqual(2, message2Consumer.MessageReceivedCount);
 		}
 
+#if !PARANOID
 		[Test]
 		public void ManuallyComposedTypeHandlesWithRemovedDuplicateHandlerDoesNotMulticasts()
 		{
 			var bus = new Bus();
 
 			var message2Consumer = new Message2Consumer();
-			bus.AddHandler(message2Consumer);
-			bus.AddHandler(message2Consumer);
-			bus.RemoveHandler(message2Consumer);
+			var token1 = bus.AddHandler(message2Consumer);
+			var token2 = bus.AddHandler(message2Consumer);
+			bus.RemoveHandler(message2Consumer, token2);
 
 			var message1 = new Message2 {CorrelationId = "1234"};
 			bus.Handle(message1);
 			Assert.AreEqual(1, message2Consumer.MessageReceivedCount);
 		}
-
+#endif
 		[Test]
 		public void RemoveHandlerWithUnknownHandlerDoesNotFail()
 		{

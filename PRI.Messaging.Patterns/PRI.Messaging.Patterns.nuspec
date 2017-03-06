@@ -8,7 +8,7 @@
     <projectUrl>https://github.com/peteraritchie/Messaging.Patterns</projectUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <description>$description$</description>
-    <releaseNotes>Fixed bug with tracking un-handled messages under high load.</releaseNotes>
+    <releaseNotes>Changed handling of multicast delegates in an effort to be more reliable.  Added PARANOID code to detect when message hander is removed but was never used.</releaseNotes>
     <copyright>$copyright$</copyright>
     <tags>Messaging message-oriented events</tags>
   </metadata>

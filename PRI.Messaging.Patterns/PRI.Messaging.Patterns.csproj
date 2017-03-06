@@ -20,7 +20,7 @@
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
     <OutputPath>bin\Debug\</OutputPath>
-    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <DefineConstants>TRACE;DEBUG;PARANOID</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
@@ -59,6 +59,7 @@
     <Compile Include="ActionPipe.cs" />
     <Compile Include="AsyncActionConsumer.cs" />
     <Compile Include="Bus.cs" />
+    <Compile Include="EnumerableExtensions.cs" />
     <Compile Include="Extensions\Bus\BusExtensions.cs" />
     <Compile Include="Exceptions\ReceivedErrorEventException.cs" />
     <Compile Include="Internal\IMessageQueue.cs" />

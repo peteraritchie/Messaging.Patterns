@@ -7,6 +7,7 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Threading;
 using System.Threading.Tasks;
+using JetBrains.Annotations;
 using Microsoft.Practices.ServiceLocation;
 using PRI.Messaging.Patterns.Exceptions;
 
@@ -38,15 +39,18 @@ namespace PRI.Messaging.Patterns.Extensions.Bus
 		/// <param name="resolver">A delegate that returns an instance of <typeparamref name="T"/></param>
 		public static void AddResolver<T>(this IBus bus, Func<T> resolver)
 		{
-			if(!busResolverDictionaries.ContainsKey(bus)) busResolverDictionaries.Add(bus, new Dictionary<Type, Delegate>());
+			if(!busResolverDictionaries.ContainsKey(bus))
+				busResolverDictionaries.Add(bus, new Dictionary<Type, Delegate>());
 			var dictionary = busResolverDictionaries[bus];
 			dictionary[typeof (T)] = resolver;
 		}
 
 		public static void SetServiceLocator(this IBus bus, IServiceLocator serviceLocator)
 		{
-			if (bus == null) throw new ArgumentNullException(nameof(bus));
-			if (serviceLocator == null) throw new ArgumentNullException(nameof(serviceLocator));
+			if (bus == null)
+				throw new ArgumentNullException(nameof(bus));
+			if (serviceLocator == null)
+				throw new ArgumentNullException(nameof(serviceLocator));
 			if (!busServiceLocators.ContainsKey(bus))
 				busServiceLocators.Add(bus, serviceLocator);
 			else
@@ -86,7 +90,8 @@ namespace PRI.Messaging.Patterns.Extensions.Bus
 		/// <param name="namespace">Include IConsumers{TMessage} within this namespace</param>
 		public static void AddHandlersAndTranslators(this IBus bus, string directory, string wildcard, string @namespace)
 		{
-			if (!busResolverDictionaries.ContainsKey(bus)) busResolverDictionaries.Add(bus, new Dictionary<Type, Delegate>());
+			if (!busResolverDictionaries.ContainsKey(bus))
+				busResolverDictionaries.Add(bus, new Dictionary<Type, Delegate>());
 			IServiceLocator serviceLocator = busServiceLocators.ContainsKey(bus) ? busServiceLocators[bus] : new ActivatorServiceLocator();
 
 			IEnumerable<Type> consumerTypes = typeof(IConsumer<>).ByImplementedInterfaceInDirectory(directory, wildcard, @namespace);
@@ -191,23 +196,38 @@ namespace PRI.Messaging.Patterns.Extensions.Bus
 		public static Task<TEvent> RequestAsync<TMessage, TEvent>(this IBus bus, TMessage message, CancellationToken cancellationToken) where TMessage : IMessage
 			where TEvent : IEvent
 		{
-			if (bus == null) throw new ArgumentNullException(nameof(bus));
-			if (message == null) throw new ArgumentNullException(nameof(message));
+			if (bus == null)
+				throw new ArgumentNullException(nameof(bus));
+			if (message == null)
+				throw new ArgumentNullException(nameof(message));
 
 			var tcs = new TaskCompletionSource<TEvent>();
 			ActionConsumer<TEvent> actionConsumer = null;
 			object token = null;
 			cancellationToken.Register(() =>
 			{
-				if (actionConsumer != null) bus.RemoveHandler(actionConsumer, token);
+				if (actionConsumer != null)
+#if PARANOID
+				{
+					var internalBus = bus as Patterns.Bus;
+					if(internalBus != null)
+						internalBus.RemoveHandler(actionConsumer, token, nocheck: true);
+					else
+						bus.RemoveHandler(actionConsumer, token);
+				}
+#else
+					bus.RemoveHandler(actionConsumer, token);
+#endif // PARANOID
 				tcs.TrySetCanceled();
 			}, useSynchronizationContext: false);
 			actionConsumer = new ActionConsumer<TEvent>(e =>
 			{
 				try
 				{
-					if (e.CorrelationId != message.CorrelationId) return;
-					if (actionConsumer != null) bus.RemoveHandler(actionConsumer, token);
+					if (e.CorrelationId != message.CorrelationId)
+						return;
+					if (actionConsumer != null)
+						bus.RemoveHandler(actionConsumer, token);
 					tcs.SetResult(e);
 				}
 				catch (Exception ex)
@@ -250,8 +270,10 @@ namespace PRI.Messaging.Patterns.Extensions.Bus
 			where TSuccessEvent : IEvent
 			where TErrorEvent : IEvent
 		{
-			if (bus == null) throw new ArgumentNullException(nameof(bus));
-			if (message == null) throw new ArgumentNullException(nameof(message));
+			if (bus == null)
+				throw new ArgumentNullException(nameof(bus));
+			if (message == null)
+				throw new ArgumentNullException(nameof(message));
 
 			var tcs = new TaskCompletionSource<TSuccessEvent>();
 			ActionConsumer<TSuccessEvent> successActionConsumer = null;
@@ -260,8 +282,30 @@ namespace PRI.Messaging.Patterns.Extensions.Bus
 			object errorToken = null;
 			cancellationToken.Register(() =>
 			{
-				if (successActionConsumer != null) bus.RemoveHandler(successActionConsumer, successToken);
-				if (errorActionConsumer != null) bus.RemoveHandler(errorActionConsumer, errorToken);
+				if (successActionConsumer != null)
+#if PARANOID
+				{
+					var internalBus = bus as Patterns.Bus;
+					if (internalBus != null)
+						internalBus.RemoveHandler(successActionConsumer, successToken, nocheck: true);
+					else
+						bus.RemoveHandler(successActionConsumer, successToken);
+				}
+#else
+					bus.RemoveHandler(successActionConsumer, successToken);//, nocheck:true);
+#endif // PARANOID
+				if (errorActionConsumer != null)
+#if PARANOID
+				{
+					var internalBus = bus as Patterns.Bus;
+					if (internalBus != null)
+						internalBus.RemoveHandler(errorActionConsumer, errorToken, nocheck: true);
+					else
+						bus.RemoveHandler(errorActionConsumer, errorToken);
+				}
+#else
+					bus.RemoveHandler(errorActionConsumer, errorToken);
+#endif // PARANOID
 				tcs.TrySetCanceled();
 			}, useSynchronizationContext: false);
 			{
@@ -269,9 +313,23 @@ namespace PRI.Messaging.Patterns.Extensions.Bus
 				{
 					try
 					{
-						if (e.CorrelationId != message.CorrelationId) return;
-						if (successActionConsumer != null) bus.RemoveHandler(successActionConsumer, successToken);
-						if (errorActionConsumer != null) bus.RemoveHandler(errorActionConsumer, errorToken);
+						if (e.CorrelationId != message.CorrelationId)
+							return;
+						if (successActionConsumer != null)
+							bus.RemoveHandler(successActionConsumer, successToken);
+						if (errorActionConsumer != null)
+#if PARANOID
+						{
+							var internalBus = bus as Patterns.Bus;
+							// don't check for unhandled error if success occured
+							if (internalBus != null)
+								internalBus.RemoveHandler(errorActionConsumer, errorToken, nocheck: true);
+							else
+								bus.RemoveHandler(errorActionConsumer, errorToken);
+						}
+#else
+					bus.RemoveHandler(errorActionConsumer, errorToken);
+#endif // PARANOID
 						tcs.SetResult(e);
 					}
 					catch (Exception ex)
@@ -286,9 +344,23 @@ namespace PRI.Messaging.Patterns.Extensions.Bus
 				{
 					try
 					{
-						if (e.CorrelationId != message.CorrelationId) return;
-						if (errorActionConsumer != null) bus.RemoveHandler(errorActionConsumer, errorToken);
-						if (successActionConsumer != null) bus.RemoveHandler(successActionConsumer, successToken);
+						if (e.CorrelationId != message.CorrelationId)
+							return;
+						if (errorActionConsumer != null)
+							bus.RemoveHandler(errorActionConsumer, errorToken);
+						if (successActionConsumer != null)
+#if PARANOID
+						{
+							var internalBus = bus as Patterns.Bus;
+							// don't check for unhandled success if error occured
+							if (internalBus != null)
+								internalBus.RemoveHandler(successActionConsumer, successToken, nocheck: true);
+							else
+								bus.RemoveHandler(successActionConsumer, successToken);
+						}
+#else
+					bus.RemoveHandler(successActionConsumer, successToken);//, nocheck:true);
+#endif // PARANOID
 						tcs.SetException(new ReceivedErrorEventException<TErrorEvent>(e));
 					}
 					catch (Exception ex)
@@ -314,6 +386,7 @@ namespace PRI.Messaging.Patterns.Extensions.Bus
 
 		private class BusAddhHandlerHelper<TMessage> where TMessage : IMessage
 		{
+			[UsedImplicitly]
 			public void AddHandler(IBus bus, IConsumer<TMessage> consumer)
 			{
 				bus.AddHandler(consumer);
@@ -324,10 +397,80 @@ namespace PRI.Messaging.Patterns.Extensions.Bus
 			where TIn : IMessage
 			where TOut : IMessage
 		{
+			[UsedImplicitly]
 			public void AttachConsumer(IPipe<TIn, TOut> pipe, IConsumer<TOut> bus)
 			{
 				pipe.AttachConsumer(new ActionConsumer<TOut>(bus.Handle));
 			}
 		}
+	}
+}
+
+namespace JetBrains.Annotations
+{
+	/// <summary>
+	/// Indicates that the marked symbol is used implicitly (e.g. via reflection, in external library),
+	/// so this symbol will not be marked as unused (as well as by other usage inspections).
+	/// </summary>
+	[AttributeUsage(AttributeTargets.All)]
+	[ExcludeFromCodeCoverage]
+	internal sealed class UsedImplicitlyAttribute : Attribute
+	{
+		public UsedImplicitlyAttribute()
+			: this(ImplicitUseKindFlags.Default, ImplicitUseTargetFlags.Default)
+		{
+		}
+
+		public UsedImplicitlyAttribute(ImplicitUseKindFlags useKindFlags)
+			: this(useKindFlags, ImplicitUseTargetFlags.Default)
+		{
+		}
+
+		public UsedImplicitlyAttribute(ImplicitUseTargetFlags targetFlags)
+			: this(ImplicitUseKindFlags.Default, targetFlags)
+		{
+		}
+
+		public UsedImplicitlyAttribute(ImplicitUseKindFlags useKindFlags, ImplicitUseTargetFlags targetFlags)
+		{
+			UseKindFlags = useKindFlags;
+			TargetFlags = targetFlags;
+		}
+
+		public ImplicitUseKindFlags UseKindFlags { get; private set; }
+
+		public ImplicitUseTargetFlags TargetFlags { get; private set; }
+	}
+
+	/// <summary>
+	/// Specify what is considered used implicitly when marked
+	/// with <see cref="MeansImplicitUseAttribute"/> or <see cref="UsedImplicitlyAttribute"/>.
+	/// </summary>
+	[Flags]
+	internal enum ImplicitUseTargetFlags
+	{
+		Default = Itself,
+		Itself = 1,
+		/// <summary>Members of entity marked with attribute are considered used.</summary>
+		Members = 2,
+		/// <summary>Entity marked with attribute and all its members considered used.</summary>
+		WithMembers = Itself | Members
+	}
+
+	[Flags]
+	internal enum ImplicitUseKindFlags
+	{
+		Default = Access | Assign | InstantiatedWithFixedConstructorSignature,
+		/// <summary>Only entity marked with attribute considered used.</summary>
+		Access = 1,
+		/// <summary>Indicates implicit assignment to a member.</summary>
+		Assign = 2,
+		/// <summary>
+		/// Indicates implicit instantiation of a type with fixed constructor signature.
+		/// That means any unused constructor parameters won't be reported as such.
+		/// </summary>
+		InstantiatedWithFixedConstructorSignature = 4,
+		/// <summary>Indicates implicit instantiation of a type.</summary>
+		InstantiatedNoFixedConstructorSignature = 8,
 	}
 }

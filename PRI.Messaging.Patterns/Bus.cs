@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 #if DEBUG
 using System.Diagnostics;
 #endif
@@ -8,6 +9,7 @@ using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using PRI.Messaging.Primitives;
+using TokenType= System.Tuple<System.Guid, System.Action<PRI.Messaging.Primitives.IMessage>, System.Func<PRI.Messaging.Primitives.IMessage, System.Threading.Tasks.Task>>;
 
 [assembly:InternalsVisibleTo("Tests")]
 namespace PRI.Messaging.Patterns
@@ -36,8 +38,10 @@ namespace PRI.Messaging.Patterns
 	public class Bus : IBus, IDisposable
 	{
 		internal readonly Dictionary<Guid, Action<IMessage>> _consumerInvokers = new Dictionary<Guid, Action<IMessage>>();
+		internal readonly Dictionary<Guid, Dictionary<Guid, Action<IMessage>>> _consumerInvokersDictionaries = new Dictionary<Guid, Dictionary<Guid, Action<IMessage>>>();
 		// TODO: add more tests
 		internal readonly Dictionary<Guid, Func<IMessage, Task>> _asyncConsumerInvokers = new Dictionary<Guid, Func<IMessage, Task>>();
+		internal readonly Dictionary<Guid, Dictionary<Guid, Func<IMessage, Task>>> _asyncConsumerInvokersDictionaries = new Dictionary<Guid, Dictionary<Guid, Func<IMessage, Task>>>();
 #if in_progress
 		internal readonly Dictionary<IMessage, Dictionary<string, string>> _outgoingMessageHeaders = new Dictionary<IMessage, Dictionary<string, string>>();
 #endif
@@ -47,6 +51,9 @@ namespace PRI.Messaging.Patterns
 
 		private ReaderWriterLockSlim _readerWriterConsumersLock = new ReaderWriterLockSlim();
 		private ReaderWriterLockSlim _readerWriterAsyncConsumersLock = new ReaderWriterLockSlim();
+#if PARANOID
+		private readonly List<Guid> _invokedConsumers = new List<Guid>();
+#endif // PARANOID
 
 		protected virtual void Handle(IMessage message, out bool wasProcessed)
 		{
@@ -68,10 +75,14 @@ namespace PRI.Messaging.Patterns
 			wasProcessed = false;
 			if (consumerExists)
 			{
+#if PARANOID
+				_invokedConsumers.AddRange(_consumerInvokersDictionaries[messageType.GUID].Keys);
+#endif // PARANOID
 				consumerInvoker(message);
 				wasProcessed = true;
 				messageProcessedHandler?.Invoke(this, new MessageProcessedEventArgs(message));
-				if (!isEvent) return;
+				if (!isEvent)
+					return;
 			}
 
 			// check base type hierarchy.
@@ -91,7 +102,8 @@ namespace PRI.Messaging.Patterns
 				{
 					consumerInvoker(message);
 					messageProcessedHandler?.Invoke(this, new MessageProcessedEventArgs(message));
-					if (!isEvent) return;
+					if (!isEvent)
+						return;
 				}
 				messageType = messageType.BaseType;
 			}
@@ -113,7 +125,8 @@ namespace PRI.Messaging.Patterns
 
 				consumerInvoker(message);
 				messageProcessedHandler?.Invoke(this, new MessageProcessedEventArgs(message));
-				if (!isEvent) return;
+				if (!isEvent)
+					return;
 			}
 		}
 
@@ -128,10 +141,23 @@ namespace PRI.Messaging.Patterns
 			pipe.AttachConsumer(new ActionConsumer<TOut>(m => this.Handle(m)));
 
 			Action<IMessage> handler = o => pipe.Handle((TIn)o);
+			var typeGuid = typeof(TIn).GUID;
+			// never gets removed, inline guid
+			var delegateGuid = Guid.NewGuid();
 			_readerWriterConsumersLock.EnterWriteLock();
 			try
 			{
-				_consumerInvokers.Add(typeof(TIn).GUID, handler);
+				if (_consumerInvokers.ContainsKey(typeGuid))
+				{
+					_consumerInvokersDictionaries[typeGuid][delegateGuid] = handler;
+					_consumerInvokers[typeGuid] = _consumerInvokersDictionaries[typeGuid].Values.Sum();
+				}
+				else
+				{
+					_consumerInvokersDictionaries.Add(typeGuid,
+						new Dictionary<Guid, Action<IMessage>> {{delegateGuid, handler}});
+					_consumerInvokers.Add(typeGuid, handler);
+				}
 			}
 			finally
 			{
@@ -153,38 +179,46 @@ namespace PRI.Messaging.Patterns
 		{
 			var asyncConsumer = consumer as IAsyncConsumer<TIn>;
 			Action<IMessage> handler = CreateConsumerDelegate(consumer);
+			var typeGuid = typeof(TIn).GUID;
+			var delegateGuid = Guid.NewGuid();
 			if (asyncConsumer == null)
 			{
 				_readerWriterConsumersLock.EnterWriteLock();
 
 				try
 				{
-					if (_consumerInvokers.ContainsKey(typeof(TIn).GUID))
+					if (_consumerInvokers.ContainsKey(typeGuid))
 					{
-						_consumerInvokers[typeof(TIn).GUID] += handler;
+						_consumerInvokersDictionaries[typeGuid][delegateGuid] = handler;
+						_consumerInvokers[typeGuid] = _consumerInvokersDictionaries[typeGuid].Values.Sum();
 					}
 					else
 					{
-						_consumerInvokers.Add(typeof(TIn).GUID, handler);
+						_consumerInvokersDictionaries.Add(typeGuid,
+							new Dictionary<Guid, Action<IMessage>> { { delegateGuid, handler } });
+						_consumerInvokers.Add(typeGuid, handler);
 					}
 				}
 				finally
 				{
 					_readerWriterConsumersLock.ExitWriteLock();
 				}
-				return new Tuple<Action<IMessage>, Func<IMessage, Task>>(handler, null);
+				return new TokenType(delegateGuid, handler, null);
 			}
 			var asyncHandler = CreateAsyncConsumerDelegate(asyncConsumer);
 			_readerWriterAsyncConsumersLock.EnterWriteLock();
 			try
 			{
-				if (_asyncConsumerInvokers.ContainsKey(typeof(TIn).GUID))
+				if (_asyncConsumerInvokers.ContainsKey(typeGuid))
 				{
-					_asyncConsumerInvokers[typeof(TIn).GUID] += asyncHandler;
+					_asyncConsumerInvokersDictionaries[typeGuid][delegateGuid] = asyncHandler;
+					_asyncConsumerInvokers[typeGuid] = _asyncConsumerInvokersDictionaries[typeGuid].Values.Sum();
 				}
 				else
 				{
-					_asyncConsumerInvokers.Add(typeof(TIn).GUID, asyncHandler);
+					_asyncConsumerInvokersDictionaries.Add(typeGuid,
+						new Dictionary<Guid, Func<IMessage, Task>> {{delegateGuid, asyncHandler}});
+					_asyncConsumerInvokers.Add(typeGuid, asyncHandler);
 				}
 			}
 			finally
@@ -195,13 +229,16 @@ namespace PRI.Messaging.Patterns
 			_readerWriterConsumersLock.EnterWriteLock();
 			try
 			{
-				if (_consumerInvokers.ContainsKey(typeof(TIn).GUID))
+				if (_consumerInvokers.ContainsKey(typeGuid))
 				{
-					_consumerInvokers[typeof(TIn).GUID] += handler;
+					_consumerInvokersDictionaries[typeGuid][delegateGuid] = handler;
+					_consumerInvokers[typeGuid] = _consumerInvokersDictionaries[typeGuid].Values.Sum();
 				}
 				else
 				{
-					_consumerInvokers.Add(typeof(TIn).GUID, handler);
+					_consumerInvokersDictionaries.Add(typeGuid,
+						new Dictionary<Guid, Action<IMessage>> { { delegateGuid, handler } });
+					_consumerInvokers.Add(typeGuid, handler);
 				}
 			}
 			finally
@@ -209,50 +246,44 @@ namespace PRI.Messaging.Patterns
 				_readerWriterConsumersLock.ExitWriteLock();
 
 			}
-			return new Tuple<Action<IMessage>, Func<IMessage, Task>>(handler, asyncHandler);
+			return new TokenType(delegateGuid, handler, asyncHandler);
 		}
 
-		public void RemoveHandler<TIn>(IConsumer<TIn> consumer, object tag) where TIn : IMessage
+#if PARANOID
+		internal 
+#else
+		public
+#endif
+		void RemoveHandler<TIn>(IConsumer<TIn> consumer, object tag
+#if PARANOID
+			, bool nocheck = false
+#endif // PARANOID
+			) where TIn : IMessage
 		{
-			var tuple = tag as Tuple<Action<IMessage>, Func<IMessage, Task>>;
-			if (tuple == null) throw new InvalidOperationException();
-
+			var tuple = tag as TokenType;
+			if (tuple == null)
+				throw new InvalidOperationException();
+			Guid typeGuid = typeof(TIn).GUID;
 			_readerWriterConsumersLock.EnterUpgradeableReadLock();
 			try
 			{
-				var hasConsumerType = _consumerInvokers.ContainsKey(typeof(TIn).GUID);
-				if (!hasConsumerType) return;
+				var hasConsumerType = _consumerInvokers.ContainsKey(typeGuid);
+				if (!hasConsumerType)
+					return;
+#if PARANOID
+				if (!nocheck && !_invokedConsumers.Contains(tuple.Item1))
+					throw new InvalidOperationException(
+						$"Consumer of message type {typeof(TIn).Name} was removed without being invoked.");
+#endif // PARANOID
 
-				_readerWriterConsumersLock.EnterWriteLock(); // TODO: optimize, make more granular below?
+				_readerWriterConsumersLock.EnterWriteLock();
 				try
 				{
-					var list = _consumerInvokers[typeof(TIn).GUID].GetInvocationList();
-					var initialCount = list.Length;
-					if (tuple.Item1 != null) _consumerInvokers[typeof(TIn).GUID] -= tuple.Item1;
-					if (!_consumerInvokers.ContainsKey(typeof(TIn).GUID)) return;
-					if (_consumerInvokers[typeof(TIn).GUID] != null)
-					{
-						list = _consumerInvokers[typeof(TIn).GUID].GetInvocationList();
-						if (initialCount == list.Length)
-						{
-							Action<IMessage> handler = CreateConsumerDelegate(consumer);
-							Delegate m =
-								list.LastOrDefault(e => e.Method.Name == handler.Method.Name && e.Target.GetType() == handler.Target.GetType());
-							if (m != null) _consumerInvokers[typeof(TIn).GUID] -= (Action<IMessage>) m;
-						}
-						if (_consumerInvokers[typeof(TIn).GUID] != null)
-						{
-							list = _consumerInvokers[typeof(TIn).GUID].GetInvocationList();
-#if DEBUG
-						Debug.Assert(initialCount != list.Length);
-#endif
-						}
-						else
-							_consumerInvokers.Remove(typeof(TIn).GUID);
-					}
+					_consumerInvokersDictionaries[typeGuid].Remove(tuple.Item1);
+					if (_consumerInvokersDictionaries[typeGuid].Any()) // any more left for that type?
+						_consumerInvokers[typeGuid] = _consumerInvokersDictionaries[typeGuid].Values.Sum();
 					else
-						_consumerInvokers.Remove(typeof(TIn).GUID);
-
+						_consumerInvokers.Remove(typeGuid); // if no more, get rid of invoker
 				}
 				finally
 				{
@@ -265,14 +296,21 @@ namespace PRI.Messaging.Patterns
 			}
 		}
 
-		[Obsolete]
+#if PARANOID
+		public void RemoveHandler<TIn>(IConsumer<TIn> consumer, object tag) where TIn : IMessage
+		{
+			RemoveHandler(consumer, tag, nocheck: false);
+		}
+#endif
+		[Obsolete, ExcludeFromCodeCoverage]
 		public void RemoveHandler<TIn>(IConsumer<TIn> consumer) where TIn : IMessage
 		{
 			_readerWriterConsumersLock.EnterUpgradeableReadLock();
 			try
 			{
 				var hasConsumerType = _consumerInvokers.ContainsKey(typeof(TIn).GUID);
-				if (!hasConsumerType) return;
+				if (!hasConsumerType)
+					return;
 
 				_readerWriterConsumersLock.EnterWriteLock(); //TODO: optimize, make more granular below?
 				try
@@ -284,8 +322,10 @@ namespace PRI.Messaging.Patterns
 					Action<IMessage> handler = CreateConsumerDelegate(consumer);
 					Delegate m =
 						list.LastOrDefault(e => e.Method.Name == handler.Method.Name && e.Target.GetType() == handler.Target.GetType());
-					if (m != null) _consumerInvokers[typeof(TIn).GUID] -= (Action<IMessage>) m;
-					if (!_consumerInvokers.ContainsKey(typeof(TIn).GUID)) return;
+					if (m != null)
+						_consumerInvokers[typeof(TIn).GUID] -= (Action<IMessage>) m;
+					if (!_consumerInvokers.ContainsKey(typeof(TIn).GUID))
+						return;
 					if (_consumerInvokers[typeof(TIn).GUID] != null)
 					{
 						list = _consumerInvokers[typeof(TIn).GUID].GetInvocationList();
@@ -329,6 +369,12 @@ namespace PRI.Messaging.Patterns
 
 		public Task HandleAsync(IMessage message)
 		{
+			bool wasProcessed;
+			return HandleAsync(message, out wasProcessed);
+		}
+
+		public Task HandleAsync(IMessage message, out bool wasProcessed)
+		{
 			var messageProcessedHandler = MessageProcessed;
 			var isEvent = message is IEvent;
 			var messageType = message.GetType();
@@ -344,11 +390,18 @@ namespace PRI.Messaging.Patterns
 			{
 				_readerWriterAsyncConsumersLock.ExitReadLock();
 			}
+
+			wasProcessed = false;
 			if (hasConsumer)
 			{
+#if PARANOID
+				_invokedConsumers.AddRange(_consumerInvokersDictionaries[messageType.GUID].Keys);
+#endif // PARANOID
 				task = consumerInvoker(message);
+				wasProcessed = true;
 				messageProcessedHandler?.Invoke(this, new MessageProcessedEventArgs(message));
-				if (!isEvent) return task;
+				if (!isEvent)
+					return task;
 			}
 
 			// check base type hierarchy.
@@ -366,12 +419,18 @@ namespace PRI.Messaging.Patterns
 				}
 				if (hasConsumer)
 				{
+#if PARANOID
+					_invokedConsumers.AddRange(_consumerInvokersDictionaries[messageType.GUID].Keys);
+#endif // PARANOID
 					var newTask = consumerInvoker(message);
+					wasProcessed = true;
 					messageProcessedHandler?.Invoke(this, new MessageProcessedEventArgs(message));
 					// merge tasks, if needed
 					task = task != null ? Task.WhenAll(task, newTask) : newTask;
-					if (!isEvent) return task;
+					if (!isEvent)
+						return task;
 				}
+
 				messageType = messageType.BaseType;
 			}
 
@@ -391,14 +450,20 @@ namespace PRI.Messaging.Patterns
 
 				if (!hasConsumer) continue;
 
+#if PARANOID
+				_invokedConsumers.AddRange(_consumerInvokersDictionaries[messageType.GUID].Keys);
+#endif // PARANOID
 				var newTask = consumerInvoker(message);
+				wasProcessed = true;
 				messageProcessedHandler?.Invoke(this, new MessageProcessedEventArgs(message));
 				// merge tasks if needed
 				task = task != null ? Task.WhenAll(task, newTask) : newTask;
-				if (!isEvent) return task;
+				if (!isEvent)
+					return task;
 			}
 
-			if (task != null) return task;
+			if (task != null)
+				return task;
 			Handle(message); // if no async handlers, handle synchronously
 			return Task.FromResult(true); // TODO: Replace with Task.CompletedTask in .NET 4.6+
 		}

@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using NUnit.Framework;
@@ -15,17 +14,6 @@ namespace Tests
 	[TestFixture]
 	public class BusTests
 	{
-#if PARANOID
-		[Test]
-		public void RemovingHandlerBeforeProcessingThrows()
-		{
-			var bus = new Bus();
-			var actionConsumer = new ActionConsumer<Message1>(m => { });
-			var token = bus.AddHandler(actionConsumer);
-			Assert.Throws<InvalidOperationException>(()=>bus.RemoveHandler(actionConsumer, token));
-		}
-#endif // PARANOID
-
 		[Test]
 		public void BusConsumesMessagesCorrectly()
 		{
@@ -40,6 +28,17 @@ namespace Tests
 			Assert.IsNotNull(receivedMessage);
 			Assert.AreEqual(message1.CorrelationId, receivedMessage.CorrelationId);
 		}
+
+#if PARANOID
+		[Test]
+		public void RemovingHandlerBeforeProcessingThrows()
+		{
+			var bus = new Bus();
+			var actionConsumer = new ActionConsumer<Message1>(m => { });
+			var token = bus.AddHandler(actionConsumer);
+			Assert.Throws<InvalidOperationException>(()=>bus.RemoveHandler(actionConsumer, token));
+		}
+#endif // PARANOID
 
 		[Test]
 		public void MultipleAsyncHandlersOfSameMessageDoesntThrow()

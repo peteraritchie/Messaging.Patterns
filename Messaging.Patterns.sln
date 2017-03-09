@@ -25,6 +25,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "github", "github", "{F689C6
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{9D96C45A-F2F8-4DB4-AAA6-EC96BB264A8C}"
 	ProjectSection(SolutionItems) = preProject
+		.editorconfig = .editorconfig
 		PRI.Messaging.Patterns\PRI.Messaging.Patterns.nuspec = PRI.Messaging.Patterns\PRI.Messaging.Patterns.nuspec
 	EndProjectSection
 EndProject

@@ -6,6 +6,7 @@
 		<authors>$author$</authors>
 		<licenseUrl>https://raw.githubusercontent.com/peteraritchie/Messaging.Patterns/develop/LICENSE</licenseUrl>
 		<projectUrl>https://github.com/peteraritchie/Messaging.Patterns</projectUrl>
+		<iconUrl>https://github.com/peteraritchie/Messaging.Patterns/raw/develop/inbox.png</iconUrl>
 		<requireLicenseAcceptance>false</requireLicenseAcceptance>
 		<description>$description$</description>
 		<releaseNotes>Changed handling of multicast delegates in an effort to be more reliable.  Added PARANOID code to detect when message hander is removed but was never used.</releaseNotes>

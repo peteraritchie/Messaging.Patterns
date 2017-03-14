@@ -195,9 +195,23 @@ namespace PRI.Messaging.Patterns
 					}
 					else
 					{
-						_consumerInvokersDictionaries.Add(typeGuid,
-							new Dictionary<Guid, Action<IMessage>> { { delegateGuid, handler } });
-						_consumerInvokers.Add(typeGuid, handler);
+						try
+						{
+							_consumerInvokersDictionaries.Add(typeGuid,
+								new Dictionary<Guid, Action<IMessage>> {{delegateGuid, handler}});
+						}
+						catch (ArgumentException ex)
+						{
+							throw new UnexpectedDuplicateKeyException(ex, typeGuid, _consumerInvokersDictionaries.Keys, "invoker dictionaries");
+						}
+						try
+						{
+							_consumerInvokers.Add(typeGuid, handler);
+						}
+						catch (ArgumentException ex)
+						{
+							throw new UnexpectedDuplicateKeyException(ex, typeGuid, _consumerInvokers.Keys, "invokers");
+						}
 					}
 				}
 				finally
@@ -275,7 +289,7 @@ namespace PRI.Messaging.Patterns
 					return;
 #if PARANOID
 				if (!nocheck && !_invokedConsumers.Contains(tuple.Item1))
-					throw new MessageHandlerRemovedBeforeProcessingMessage<TIn>();
+					throw new MessageHandlerRemovedBeforeProcessingMessageException<TIn>();
 #endif // PARANOID
 
 				_readerWriterConsumersLock.EnterWriteLock();

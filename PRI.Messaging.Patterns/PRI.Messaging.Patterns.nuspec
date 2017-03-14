@@ -9,7 +9,7 @@
 		<iconUrl>https://github.com/peteraritchie/Messaging.Patterns/raw/develop/inbox.png</iconUrl>
 		<requireLicenseAcceptance>false</requireLicenseAcceptance>
 		<description>$description$</description>
-		<releaseNotes>Switched to some custom exceptions for debugging comfort.</releaseNotes>
+		<releaseNotes>Added extra checking when adding handlers.</releaseNotes>
 		<copyright>$copyright$</copyright>
 		<tags>Messaging message-oriented events</tags>
 	</metadata>

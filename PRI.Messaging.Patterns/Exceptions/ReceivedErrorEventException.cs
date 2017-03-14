@@ -13,13 +13,4 @@ namespace PRI.Messaging.Patterns.Exceptions
 			ErrorEvent = errorEvent;
 		}
 	}
-
-	public class MessageHandlerRemovedBeforeProcessingMessage<T> : Exception
-		where T : IMessage
-	{
-		public MessageHandlerRemovedBeforeProcessingMessage()
-			:base($"Consumer of message type {typeof(T).Name} was removed without being invoked.")
-		{
-		}
-	}
 }

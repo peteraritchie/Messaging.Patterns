@@ -60,6 +60,7 @@
     <Compile Include="AsyncActionConsumer.cs" />
     <Compile Include="Bus.cs" />
     <Compile Include="EnumerableExtensions.cs" />
+    <Compile Include="Exceptions\MessageHandlerRemovedBeforeProcessingMessageException.cs" />
     <Compile Include="Extensions\Bus\BusExtensions.cs" />
     <Compile Include="Exceptions\ReceivedErrorEventException.cs" />
     <Compile Include="Internal\IMessageQueue.cs" />

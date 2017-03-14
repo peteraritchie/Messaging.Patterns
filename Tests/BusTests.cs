@@ -37,7 +37,7 @@ namespace Tests
 			var bus = new Bus();
 			var actionConsumer = new ActionConsumer<Message1>(m => { });
 			var token = bus.AddHandler(actionConsumer);
-			Assert.Throws<MessageHandlerRemovedBeforeProcessingMessage<Message1>>(()=>bus.RemoveHandler(actionConsumer, token));
+			Assert.Throws<MessageHandlerRemovedBeforeProcessingMessageException<Message1>>(()=>bus.RemoveHandler(actionConsumer, token));
 		}
 #endif // PARANOID
 

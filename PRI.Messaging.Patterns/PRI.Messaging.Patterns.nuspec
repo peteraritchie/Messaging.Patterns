@@ -9,7 +9,7 @@
 		<iconUrl>https://github.com/peteraritchie/Messaging.Patterns/raw/develop/inbox.png</iconUrl>
 		<requireLicenseAcceptance>false</requireLicenseAcceptance>
 		<description>$description$</description>
-		<releaseNotes>Changed handling of multicast delegates in an effort to be more reliable.  Added PARANOID code to detect when message hander is removed but was never used.</releaseNotes>
+		<releaseNotes>Switched to some custom exceptions for debugging comfort.</releaseNotes>
 		<copyright>$copyright$</copyright>
 		<tags>Messaging message-oriented events</tags>
 	</metadata>

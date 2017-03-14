@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using NUnit.Framework;
 using PRI.Messaging.Patterns;
+using PRI.Messaging.Patterns.Exceptions;
 using PRI.Messaging.Patterns.Extensions.Bus;
 using PRI.Messaging.Primitives;
 using Tests.Mocks;
@@ -36,7 +37,7 @@ namespace Tests
 			var bus = new Bus();
 			var actionConsumer = new ActionConsumer<Message1>(m => { });
 			var token = bus.AddHandler(actionConsumer);
-			Assert.Throws<InvalidOperationException>(()=>bus.RemoveHandler(actionConsumer, token));
+			Assert.Throws<MessageHandlerRemovedBeforeProcessingMessageException<Message1>>(()=>bus.RemoveHandler(actionConsumer, token));
 		}
 #endif // PARANOID
 
@@ -167,7 +168,14 @@ namespace Tests
 		public void RemoveHandlerWithNullTokenThrows()
 		{
 			var bus = new Bus();
-			Assert.Throws<InvalidOperationException>(() => bus.RemoveHandler(new ActionConsumer<Message1>(m => { }), null));
+			Assert.Throws<ArgumentNullException>(() => bus.RemoveHandler(new ActionConsumer<Message1>(m => { }), null));
+		}
+
+		[Test]
+		public void RemoveHandlerWithTokenThatIsNotTokenTypeThrows()
+		{
+			var bus = new Bus();
+			Assert.Throws<InvalidOperationException>(() => bus.RemoveHandler(new ActionConsumer<Message1>(m => { }), new object()));
 		}
 
 		[Test]
@@ -297,6 +305,7 @@ namespace Tests
 		[Test, Explicit]
 		public void D()
 		{
+			var t = typeof(Event1);
 			var bus = new TracingBus();
 			var rng = new Random();
 			bus.AddHandler(new ActionConsumer<Command1>(m => { Thread.Sleep(rng.Next(0, 100)); bus.Send(new Event1(m.CorrelationId)); }));

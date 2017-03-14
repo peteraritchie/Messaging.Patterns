@@ -1,4 +1,4 @@
-version: 1.0.{build}
+version: 1.1.{build}
 branches:
   only:
   - master
@@ -9,10 +9,19 @@ assembly_info:
   assembly_version: '{version}'
   assembly_file_version: '{version}'
   assembly_informational_version: '{version}'
+nuget:
+  disable_publish_on_pr: true
 build:
+  publish_nuget: true
+  publish_nuget_symbols: true
+  include_nuget_references: true
   verbosity: minimal
 after_build:
-- ps: nuget.exe pack .\PRI.Messaging.Patterns\PRI.Messaging.Patterns.csproj -Prop Configuration=Release -Symbols -version $env:APPVEYOR_BUILD_VERSION
+- ps: '#nuget.exe pack .\PRI.Messaging.Patterns\PRI.Messaging.Patterns.csproj -Prop Configuration=Release -Symbols -version $env:APPVEYOR_BUILD_VERSION'
+test:
+  categories:
+    except:
+    - Performance
 artifacts:
 - path: '*.nupkg'
   name: nuget

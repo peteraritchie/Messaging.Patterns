@@ -1,0 +1,12 @@
+[*.cs]
+indent_style=tab
+indent_size=4
+[*.config]
+indent_style=tab
+indent_size=4
+[*.nuspec]
+indent_style=tab
+indent_size=4
+[*.targets]
+indent_style=tab
+indent_size=4

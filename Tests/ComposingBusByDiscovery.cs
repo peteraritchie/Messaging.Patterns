@@ -178,9 +178,9 @@ namespace Tests
 			var directory = Path.GetDirectoryName(new Uri(GetType().Assembly.CodeBase).LocalPath);
 			bus.AddHandlersAndTranslators(directory, "Tests*.dll", GetType().Namespace);
 
-			Assert.IsTrue(bus._consumerInvokers.ContainsKey(typeof(Message3).GUID));
-			Assert.IsTrue(bus._consumerInvokers.ContainsKey(typeof(Message2).GUID));
-			Assert.IsTrue(bus._consumerInvokers.ContainsKey(typeof(Message1).GUID));
+			Assert.IsTrue(bus._consumerInvokers.ContainsKey(typeof(Message3).AssemblyQualifiedName));
+			Assert.IsTrue(bus._consumerInvokers.ContainsKey(typeof(Message2).AssemblyQualifiedName));
+			Assert.IsTrue(bus._consumerInvokers.ContainsKey(typeof(Message1).AssemblyQualifiedName));
 		}
 
 		[Test]

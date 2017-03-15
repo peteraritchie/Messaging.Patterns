@@ -149,6 +149,19 @@ namespace Tests
 			bus.RemoveHandler(new ActionConsumer<Message1>(m => receivedMessage1 = m), token);
 		}
 
+
+		[Test]
+		public void RemoveLastSubscribedHandlerClearsInternalDictionaries()
+		{
+			var bus = new Bus();
+			Message1 receivedMessage1 = null;
+			var token = bus.AddHandler(new ActionConsumer<Message1>(m => receivedMessage1 = m));
+			bus.Handle(new Message1());
+			bus.RemoveHandler(new ActionConsumer<Message1>(m => receivedMessage1 = m), token);
+			Assert.AreEqual(0, bus._consumerInvokers.Count);
+			Assert.AreEqual(0, bus._consumerInvokersDictionaries.Count);
+		}
+
 		[Test]
 		public void InterleavedRemoveHandlerRemovesCorrectHandler()
 		{

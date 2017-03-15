@@ -9,7 +9,7 @@
 		<iconUrl>https://github.com/peteraritchie/Messaging.Patterns/raw/develop/inbox.png</iconUrl>
 		<requireLicenseAcceptance>false</requireLicenseAcceptance>
 		<description>$description$</description>
-		<releaseNotes>Added extra checking when adding handlers.</releaseNotes>
+		<releaseNotes>Fixed out-of sync internal dictionaries problem.</releaseNotes>
 		<copyright>$copyright$</copyright>
 		<tags>Messaging message-oriented events</tags>
 	</metadata>

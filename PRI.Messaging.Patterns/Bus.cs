@@ -299,7 +299,10 @@ namespace PRI.Messaging.Patterns
 					if (_consumerInvokersDictionaries[typeGuid].Any()) // any more left for that type?
 						_consumerInvokers[typeGuid] = _consumerInvokersDictionaries[typeGuid].Values.Sum();
 					else
+					{
 						_consumerInvokers.Remove(typeGuid); // if no more, get rid of invoker
+						_consumerInvokersDictionaries.Remove(typeGuid);
+					}
 				}
 				finally
 				{

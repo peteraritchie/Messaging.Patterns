@@ -117,15 +117,51 @@
   <resheader name="writer">
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
-  <data name="AnalyzerDescription" xml:space="preserve">
+  <data name="Mp0100Description" xml:space="preserve">
+    <value>Calls to RequestAsync should be awaited</value>
+    <comment>An optional longer localizable description of the diagnostic.</comment>
+  </data>
+  <data name="Mp0100MessageFormat" xml:space="preserve">
+    <value>Call to RequestAsync not awaited.</value>
+    <comment>The format-able message the diagnostic displays.</comment>
+  </data>
+  <data name="Mp0100Title" xml:space="preserve">
+    <value>Call to RequestAsync not awaited.</value>
+    <comment>The title of the diagnostic.</comment>
+  </data>
+  <data name="Mp0101Description" xml:space="preserve">
+    <value>Calls to RequestAsync with error events should be guarded with try/catch</value>
+    <comment>An optional longer localizable description of the diagnostic.</comment>
+  </data>
+  <data name="Mp0101MessageFormat" xml:space="preserve">
+    <value>Call to RequestAsync with error event but no try/catch.</value>
+    <comment>The format-able message the diagnostic displays.</comment>
+  </data>
+  <data name="Mp0101Title" xml:space="preserve">
+    <value>Call to RequestAsync with error event but no try.catch.</value>
+    <comment>The title of the diagnostic.</comment>
+  </data>
+  <data name="Mp0102Description" xml:space="preserve">
     <value>Type names should be all uppercase.</value>
     <comment>An optional longer localizable description of the diagnostic.</comment>
   </data>
-  <data name="AnalyzerMessageFormat" xml:space="preserve">
+  <data name="Mp0102MessageFormat" xml:space="preserve">
     <value>Type name '{0}' contains lowercase letters</value>
     <comment>The format-able message the diagnostic displays.</comment>
   </data>
-  <data name="AnalyzerTitle" xml:space="preserve">
+  <data name="Mp0102Title" xml:space="preserve">
+    <value>Type name contains lowercase letters</value>
+    <comment>The title of the diagnostic.</comment>
+  </data>
+  <data name="Mp0103Description" xml:space="preserve">
+    <value>Type names should be all uppercase.</value>
+    <comment>An optional longer localizable description of the diagnostic.</comment>
+  </data>
+  <data name="Mp0103MessageFormat" xml:space="preserve">
+    <value>Type name '{0}' contains lowercase letters</value>
+    <comment>The format-able message the diagnostic displays.</comment>
+  </data>
+  <data name="Mp0103Title" xml:space="preserve">
     <value>Type name contains lowercase letters</value>
     <comment>The title of the diagnostic.</comment>
   </data>

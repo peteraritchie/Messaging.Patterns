@@ -1,40 +1,60 @@
 using System;
-using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Linq;
-using System.Reflection;
-using System.Threading;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
-using Microsoft.CodeAnalysis.FindSymbols;
-using PRI.Messaging.Patterns.Extensions.Bus;
+using PRI.Messaging.Patterns.Exceptions;
 using PRI.Messaging.Primitives;
-using TypeInfo = System.Reflection.TypeInfo;
 
 namespace PRI.Messaging.Patterns.Analyzer
 {
 	[DiagnosticAnalyzer(LanguageNames.CSharp)]
 	public class PRIMessagingPatternsAnalyzer : DiagnosticAnalyzer
 	{
-		//private static object reference = MetadataReference.CreateFromAssembly(System.Runtime.Loader.AssemblyLoadContext.typeof(IBus).GetTypeInfo().Assembly);
-		public const string DiagnosticId = "PRIMessagingPatternsAnalyzer";
+		public static readonly DiagnosticDescriptor RuleMp0100 =
+			new DiagnosticDescriptor("MP0100",
+				GetResourceString(nameof(Resources.Mp0100Title)),
+				GetResourceString(nameof(Resources.Mp0100MessageFormat)),
+				"Maintainability",
+				DiagnosticSeverity.Warning,
+				isEnabledByDefault: true,
+				description: GetResourceString(nameof(Resources.Mp0100Description)));
+		public static readonly DiagnosticDescriptor RuleMp0101 =
+			new DiagnosticDescriptor("MP0101",
+				GetResourceString(nameof(Resources.Mp0101Title)),
+				GetResourceString(nameof(Resources.Mp0101MessageFormat)),
+				"Maintainability",
+				DiagnosticSeverity.Error,
+				isEnabledByDefault: true,
+				description: GetResourceString(nameof(Resources.Mp0101Description)));
+		public static readonly DiagnosticDescriptor RuleMp0102 =
+			new DiagnosticDescriptor("MP0102",
+				GetResourceString(nameof(Resources.Mp0102Title)),
+				GetResourceString(nameof(Resources.Mp0102MessageFormat)),
+				"Maintainability",
+				DiagnosticSeverity.Warning,
+				isEnabledByDefault: true,
+				description: GetResourceString(nameof(Resources.Mp0102Description)));
+		public static readonly DiagnosticDescriptor RuleMp0103 =
+			new DiagnosticDescriptor("MP0103",
+				GetResourceString(nameof(Resources.Mp0103Title)),
+				GetResourceString(nameof(Resources.Mp0103MessageFormat)),
+				"Maintainability",
+				DiagnosticSeverity.Warning,
+				isEnabledByDefault: true,
+				description: GetResourceString(nameof(Resources.Mp0103Description)));
 
-		// You can change these strings in the Resources.resx file. If you do not want your analyzer to be localize-able, you can use regular strings for Title and MessageFormat.
-		// See https://github.com/dotnet/roslyn/blob/master/docs/analyzers/Localizing%20Analyzers.md for more on localization
-		private static readonly LocalizableString Title = new LocalizableResourceString(nameof(Resources.AnalyzerTitle), Resources.ResourceManager, typeof(Resources));
-		private static readonly LocalizableString MessageFormat = new LocalizableResourceString(nameof(Resources.AnalyzerMessageFormat), Resources.ResourceManager, typeof(Resources));
-		private static readonly LocalizableString Description = new LocalizableResourceString(nameof(Resources.AnalyzerDescription), Resources.ResourceManager, typeof(Resources));
-		private const string Category = "Naming";
+		private static LocalizableResourceString GetResourceString(string name) 
+			=> new LocalizableResourceString(name, Resources.ResourceManager, typeof(Resources));
 
-		private static DiagnosticDescriptor Rule = new DiagnosticDescriptor(DiagnosticId, Title, MessageFormat, Category, DiagnosticSeverity.Warning, isEnabledByDefault: true, description: Description);
 		private static ITypeSymbol _iBusSymbol;
 		private static Type _type = typeof(IBus);
 
 		public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics
-			=> ImmutableArray.Create(Rule);
+			=> ImmutableArray.Create(RuleMp0100, RuleMp0101, RuleMp0102, RuleMp0103);
 
 		public override void Initialize(AnalysisContext context)
 		{
@@ -62,13 +82,15 @@ namespace PRI.Messaging.Patterns.Analyzer
 			var methodDeclarationSyntax = analysisContext.Node as MethodDeclarationSyntax;
 			foreach (var invocationSyntax in methodDeclarationSyntax.DescendantNodes(_=>true).OfType<InvocationExpressionSyntax>())
 			{
-				var expression = invocationSyntax.Expression;
-				var x = analysisContext.SemanticModel.GetSymbolInfo(invocationSyntax);
-				x = analysisContext.SemanticModel.GetSymbolInfo(invocationSyntax.Expression);
-				var descendentSyntaxNodes = invocationSyntax.DescendantNodes();
-				var descendentMemberAccessExpressionSyntaxNodes = invocationSyntax.DescendantNodes().OfType<MemberAccessExpressionSyntax>();
-				//analysisContext.SemanticModel.descendentMemberAccessExpressionSyntaxNodes.ElementAt(0)
-				var descendantExpressionNodes = expression.DescendantNodes().ToArray();
+				var invocationSyntaxExpression = invocationSyntax.Expression as MemberAccessExpressionSyntax;
+				if (invocationSyntaxExpression == null)
+				{
+					continue;
+				}
+				var parentdecl = invocationSyntaxExpression.Ancestors().OfType<MethodDeclarationSyntax>();
+				var descendantExpressionNodes = invocationSyntaxExpression.DescendantNodes().ToArray();
+				// assumes identifier in use is the first element (IBus), and the method invoked on it
+				// is the second
 				if (descendantExpressionNodes.Length < 2)
 				{
 					continue;
@@ -78,22 +100,92 @@ namespace PRI.Messaging.Patterns.Analyzer
 				{
 					continue;
 				}
-				//Assembly
-				var invokedIdentifierTypeInfo = analysisContext.SemanticModel.GetTypeInfo(invokedIdentifierName).Type;
-				if (invokedIdentifierTypeInfo == null)
+				var semanticModel = analysisContext.SemanticModel;
+				var invokedIdentifierTypeInfo = semanticModel.GetTypeInfo(invokedIdentifierName).Type;
+				if (invokedIdentifierTypeInfo == null || invokedIdentifierTypeInfo.TypeKind == TypeKind.Error)
 				{
 					continue;
 				}
-				if (!ImplementsIBus(invokedIdentifierTypeInfo)) continue;
+				if (!ImplementsIBus(invokedIdentifierTypeInfo))
+				{
+					continue;
+				}
 
 				var methodExpression = descendantExpressionNodes.ElementAt(1);
-				var methodSymbolInfo = analysisContext.SemanticModel.GetSymbolInfo(methodExpression).Symbol as IMethodSymbol;
+				var methodSymbolInfo = semanticModel.GetSymbolInfo(methodExpression).Symbol as IMethodSymbol;
 				if (methodSymbolInfo == null)
 				{
 					return;
 				}
 				if (IsRequestAsync(methodSymbolInfo))
 				{
+					if (!(invocationSyntax.Parent is AwaitExpressionSyntax))
+					{
+						var diagnostic = Diagnostic.Create(RuleMp0100,
+							methodExpression.GetLocation());
+
+						analysisContext.ReportDiagnostic(diagnostic);
+					}
+					var parent = invocationSyntax.Parent;
+					TryStatementSyntax parentTryStatement = null;
+					while (!(parent is MethodDeclarationSyntax))
+					{
+						if (parent is BlockSyntax)
+						{
+							parentTryStatement = parent.Parent as TryStatementSyntax;
+							if (parentTryStatement != null)
+							{
+								break;
+							}
+						}
+						parent = parent.Parent;
+					}
+					var genericNameSyntax = (GenericNameSyntax) invocationSyntaxExpression.Name;//.TypeArgumentList
+					if (parentTryStatement == null)
+					{
+						if (genericNameSyntax.TypeArgumentList.Arguments.Count > 2)
+						{
+							var diagnostic = Diagnostic.Create(RuleMp0101,
+								methodExpression.GetLocation());
+
+							analysisContext.ReportDiagnostic(diagnostic);
+						}
+					}
+					else
+					{
+						// get catch type
+						var exceptionType = typeof(ReceivedErrorEventException<>);
+						var firstRightCatch = parentTryStatement.GetFirstCatchClauseByType(semanticModel, exceptionType);
+						if (firstRightCatch == null)
+						{
+							var diagnostic = Diagnostic.Create(RuleMp0101,
+								methodExpression.GetLocation());
+
+							analysisContext.ReportDiagnostic(diagnostic);
+						}
+						else
+						{
+							var errorType = semanticModel.GetTypeInfo(firstRightCatch.Declaration.Type).Type as INamedTypeSymbol;
+							if (errorType == null)
+							{
+								// TODO: diagnose?
+							}
+							else
+							{
+								var catchErrorEventType = errorType.TypeArguments[0];
+								var argumentErrorEventType =
+									semanticModel.GetTypeInfo(genericNameSyntax.TypeArgumentList.Arguments[2]).Type;
+								// check that the type parameter to the error type is the same as the error
+								// event parameter in the RequestAsync invocation
+								if (!argumentErrorEventType.Equals(catchErrorEventType))
+								{
+									Debug.WriteLine("arguments are not right");
+									// TODO: diagnose
+								}
+							}
+						}
+					}
+
 					// TODO: check to make sure there's an exception block catching ReceivedErrorEventException<TErrorEvent> or higher
 					// TODO: offer to break out the continuation into a success event handler the exception block into an error event handler
 					// hooking them up where other bus.AddHandlers are called and replace RequestAsync with Send
@@ -112,50 +204,12 @@ namespace PRI.Messaging.Patterns.Analyzer
 		private bool IsRequestAsync(IMethodSymbol methodSymbolInfo)
 		{
 			if (methodSymbolInfo.Arity == 0 || !methodSymbolInfo.IsGenericMethod) return false;
-			var mis = typeof(BusExtensions).GetRuntimeMethods().Where(e=>e.Name == nameof(BusExtensions.RequestAsync));
-			MethodInfo match = null;
-			foreach (MethodInfo mi in mis)
-			{
-				var x =
-					SquareToAngleBrackets(mi.ToString()
-						.Replace($"{mi.ReturnType} {mi.Name}",
-							$"{mi.ReturnType} {mi.DeclaringType}.{mi.Name}"));
-				var y = GetSignature(methodSymbolInfo);
-				if (x == y &&
-					mi.DeclaringType.AssemblyQualifiedName == $"{methodSymbolInfo.ReducedFrom.ContainingType.ToString()}, {methodSymbolInfo.ContainingAssembly.Identity}")
-				{
-					match = mi;
-					break;
-				}
-			}
-
-			var matchingMethod =
-				mis.SingleOrDefault(
-					mi =>
-						SquareToAngleBrackets(mi.ToString()
-							.Replace($"{mi.ReturnType} {mi.Name}", $"{mi.ReturnType} {mi.DeclaringType}.{mi.Name}")) ==
-						GetSignature(methodSymbolInfo) &&
-						mi.DeclaringType.AssemblyQualifiedName == $"{methodSymbolInfo.ReducedFrom.ContainingType.ToString()}, {methodSymbolInfo.ContainingAssembly.Identity}");
+			var matchingMethod = Helpers.GetRequestAsyncInvocationMethodInfo(methodSymbolInfo);
 			if (matchingMethod != null)
 			{
 				return true;
 			}
 			return false;
-		}
-
-		private static string GetSignature(IMethodSymbol methodSymbol)
-		{
-			return $"{methodSymbol.ReducedFrom.ReturnType} {methodSymbol.ReducedFrom}".Replace(", ", ",");
-		}
-
-		private static string SquareToAngleBrackets(string text)
-		{
-			var result = text.Replace('[', '<');
-			result = result.Replace("`1", "");
-			result = result.Replace("`2", "");
-			result = result.Replace("`3", "");
-			result = result.Replace(", ", ",");
-			return result.Replace(']', '>');
 		}
 
 		private static bool ImplementsIBus(ITypeSymbol invokedIdentifierTypeInfo)

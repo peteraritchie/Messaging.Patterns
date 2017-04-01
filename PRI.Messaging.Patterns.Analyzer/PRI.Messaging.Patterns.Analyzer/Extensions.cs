@@ -204,6 +204,30 @@ static internal class Extensions
 			SyntaxFactory.TypeArgumentList(SyntaxFactory.SeparatedList(typeParams.Select(generator.TypeExpression).Cast<TypeSyntax>())));
 	}
 
+	public static IEnumerable<SyntaxToken> GetTokens(this IEnumerable<SyntaxNode> nodes)
+	{
+		foreach (var node in nodes)
+		{
+			var equals = node as EqualsValueClauseSyntax;
+			if (equals != null)
+			{
+				yield return equals.EqualsToken;
+			}
+			else
+			{
+				var assignment = node as AssignmentExpressionSyntax;
+				if (assignment != null)
+				{
+					yield return assignment.OperatorToken;
+				}
+				else
+				{
+					throw new NotSupportedException($"node type {node.GetType().FullName} not supported in GetTokens");
+				}
+			}
+		}
+	}
+
 	public static SyntaxNode GetAncestorStatement(this SyntaxToken token)
 	{
 		var node = token.Parent;

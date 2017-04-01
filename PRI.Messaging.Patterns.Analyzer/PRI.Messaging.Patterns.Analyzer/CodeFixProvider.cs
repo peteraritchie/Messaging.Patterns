@@ -12,7 +12,6 @@ using Microsoft.CodeAnalysis.CodeActions;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Editing;
-using Microsoft.CodeAnalysis.Text;
 using PRI.Messaging.Patterns.Exceptions;
 using PRI.Messaging.Primitives;
 
@@ -38,50 +37,20 @@ namespace PRI.Messaging.Patterns.Analyzer
 		private static async Task<Document> InvokeMp0101(Diagnostic diagnostic, Document document,
 			CancellationToken cancellationToken)
 		{
+			// 2: add a try/catch block around RequestAsync 
+			// add block around RequestAsync call up to last
+			// access to any variable the result is assigned to.
+			// a: find span that would best fit the try
+			// 
+			// b: add the catch with default code:
+			// catch(ReceivedErrorEventException<{3rd type parameter}> ex)
+			// { throw new NotImplementedException(ex.Message); }
+			// 3: catch...
+
 			var model = await document.GetSemanticModelAsync(cancellationToken);
 			var root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
-			var diagnosticSpan = diagnostic.Location.SourceSpan;
-
-			{ //pm wrap await span in try/catch
-				// Find the type declaration identified by the diagnostic.
-				var subjectToken = root.FindToken(diagnosticSpan.Start);
-				var invocation =
-					subjectToken.Parent.AncestorsAndSelf().OfType<InvocationExpressionSyntax>().First();
-				// verify invocation is the one we want
-				var methodSymbolInfo = model.GetSymbolInfo(invocation).Symbol as IMethodSymbol;
-
-				if (methodSymbolInfo == null || methodSymbolInfo.TypeArguments.Length < 3)
-				{
-					Debug.WriteLine("uh oh");
-					throw new InvalidOperationException();
-				}
-
-				var invocationParent = invocation.Parent;
-				if (!(invocationParent is AwaitExpressionSyntax))
-				{
-					throw new InvalidOperationException();
-				}
-
-				var containingMethod = invocationParent.GetContainingMethod();
-
-				var tryTextSpan = containingMethod.GetSpanOfAssignmentDependenciesInSpan(
-					subjectToken.GetAncestorStatement().FullSpan, model);
-
-				// TODO: args to pm?
-				// assume, RequestAsync return is assigned to something (covered by other rule)
-				// 1: get 3rd type parameter in invocation
-				var errorEventType = methodSymbolInfo.TypeArguments.ElementAt(2);
-				var generator = SyntaxGenerator.GetGenerator(document);
-				var exceptionType = typeof(ReceivedErrorEventException<>).AsTypeSyntax(generator, errorEventType);
-
-				var tryBlockStatements = containingMethod.SyntaxTree
-					.GetRoot().DescendantNodes()
-					.Where(x => tryTextSpan.Contains(x.Span))
-					.OfType<StatementSyntax>().ToArray();
-
-				var exceptionArgumentIdentifierName = SyntaxFactory.IdentifierName("ex");
-
-				var catchStatements = SyntaxFactory.SingletonList<StatementSyntax>(
+			Func<IdentifierNameSyntax, SyntaxList<StatementSyntax>> generateCatchStatements =
+				exceptionIdentifierName => SyntaxFactory.SingletonList<StatementSyntax>(
 					SyntaxFactory.ExpressionStatement(
 						SyntaxFactory.InvocationExpression(
 								SyntaxFactory.MemberAccessExpression(
@@ -106,49 +75,41 @@ namespace PRI.Messaging.Patterns.Analyzer
 										SyntaxFactory.Argument(
 											SyntaxFactory.MemberAccessExpression(
 												SyntaxKind.SimpleMemberAccessExpression,
-												exceptionArgumentIdentifierName,
+												exceptionIdentifierName,
 												SyntaxFactory.IdentifierName(nameof(ReceivedErrorEventException<IEvent>.ErrorEvent)))))))));
+			// Find the type declaration identified by the diagnostic.
+			var subjectToken = root.FindToken(diagnostic.Location.SourceSpan.Start);
+			var invocation =
+				subjectToken.Parent.AncestorsAndSelf().OfType<InvocationExpressionSyntax>().First();
 
-				var tryBlock = SyntaxFactory.Block(SyntaxFactory.List(tryBlockStatements));
-				var catchList = new SyntaxList<CatchClauseSyntax>().Add(
-					SyntaxFactory.CatchClause()
-						.WithDeclaration(
-							SyntaxFactory.CatchDeclaration(exceptionType)
-								.WithIdentifier(exceptionArgumentIdentifierName.Identifier))
-						.WithBlock(SyntaxFactory.Block(catchStatements)
-						)
-				);
-				var tryStatement = SyntaxFactory.TryStatement(SyntaxFactory.Token(SyntaxKind.TryKeyword),
-					tryBlock, catchList, default(FinallyClauseSyntax));
-
-				var newMethod = containingMethod.ReplaceNodes(tryBlockStatements.ToImmutableList(), tryStatement);
-				root = root.ReplaceNode(containingMethod, newMethod);
-
-				// 2: add a try/catch block around RequestAsync 
-				// add block around RequestAsync call up to last
-				// access to any variable the result is assigned to.
-				// a: find span that would best fit the try
-				// 
-				// b: add the catch with default code:
-				// catch(ReceivedErrorEventException<{3rd type parameter}> ex)
-				// { throw new NotImplementedException(ex.Message); }
-				// 3: catch...
-
-				var compilationUnitSyntax = (CompilationUnitSyntax) root;
-
-				var usings = compilationUnitSyntax.Usings;
-				if (!usings.Any(e => e.Name.ToString().Equals(typeof(Task).Namespace)))
-				{
-					var usingDirective = SyntaxFactory.UsingDirective(SyntaxFactory.ParseName(typeof(Task).Namespace));
-					compilationUnitSyntax = compilationUnitSyntax.AddUsings(usingDirective);
-				}
-				if (!usings.Any(e => e.Name.ToString().Equals(typeof(Debug).Namespace)))
-				{
-					var usingDirective = SyntaxFactory.UsingDirective(SyntaxFactory.ParseName(typeof(Debug).Namespace));
-					compilationUnitSyntax = compilationUnitSyntax.AddUsings(usingDirective);
-				}
-				return document.WithSyntaxRoot(compilationUnitSyntax);
+			// verify invocation is the one we want
+			if (!(invocation.Parent is AwaitExpressionSyntax))
+			{
+				throw new InvalidOperationException($"{Facts.GetCurrentMethodName()} operates on an await statement, and await statement not found.");
 			}
+
+			var methodSymbolInfo = model.GetSymbolInfo(invocation).Symbol as IMethodSymbol;
+
+			if (methodSymbolInfo == null || methodSymbolInfo.TypeArguments.Length < 3)
+			{
+				throw new InvalidOperationException();
+			}
+
+			// assume, RequestAsync return is assigned to something (covered by other rule)
+			// 1: get 3rd type parameter in invocation
+			var errorEventType = methodSymbolInfo.TypeArguments.ElementAt(2);
+			var generator = SyntaxGenerator.GetGenerator(document);
+			var exceptionArgumentsInfo = new Dictionary<string, TypeSyntax>
+			{
+				{"ex", typeof(ReceivedErrorEventException<>).AsTypeSyntax(generator, errorEventType)}
+			};
+
+			return
+				document.WithSyntaxRoot(Microsoft.CodeAnalysis.Formatting.Formatter.Format(
+					subjectToken.GetAncestorStatement().TryCatchSafe(exceptionArgumentsInfo,
+					generateCatchStatements,
+					root,
+					model), document.Project.Solution.Workspace, document.Project.Solution.Workspace.Options));
 		}
 
 		private static async Task<Document> InvokeMp0100(Diagnostic diagnostic, Document document, CancellationToken cancellationToken)
@@ -199,7 +160,6 @@ namespace PRI.Messaging.Patterns.Analyzer
 		}
 
 		private static async Task<Document> InvokeAsync(Document document, InvocationExpressionSyntax invocation, CancellationToken cancellationToken)
-
 		{
 			var parentMethodDeclaration = invocation.Ancestors().OfType<MethodDeclarationSyntax>().FirstOrDefault();
 			var annotation = new SyntaxAnnotation(Guid.NewGuid().ToString("D"));

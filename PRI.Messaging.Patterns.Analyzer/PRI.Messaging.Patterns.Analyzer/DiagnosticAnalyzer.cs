@@ -2,6 +2,7 @@ using System;
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Linq;
+using System.Threading;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -50,7 +51,7 @@ namespace PRI.Messaging.Patterns.Analyzer
 		private static LocalizableResourceString GetResourceString(string name) 
 			=> new LocalizableResourceString(name, Resources.ResourceManager, typeof(Resources));
 
-		private static ITypeSymbol _iBusSymbol;
+		private ITypeSymbol _iBusSymbol;
 		private static Type _type = typeof(IBus);
 
 		public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics
@@ -72,6 +73,7 @@ namespace PRI.Messaging.Patterns.Analyzer
 		private void AnalyzeLocalDeclaration(SyntaxNodeAnalysisContext obj)
 		{
 			var local = obj.Node as LocalDeclarationStatementSyntax;
+			Debug.Assert(local != null, "local != null");
 			var type = local.Declaration.Type;
 			var symbol = obj.SemanticModel.GetSymbolInfo(type).Symbol;
 			if (symbol == null) return;
@@ -79,15 +81,22 @@ namespace PRI.Messaging.Patterns.Analyzer
 
 		private void AnalyzeMethodDeclaration(SyntaxNodeAnalysisContext analysisContext)
 		{
+			AnalyzeMethodDeclaration(analysisContext, analysisContext.CancellationToken);
+		}
+
+		private void AnalyzeMethodDeclaration(SyntaxNodeAnalysisContext analysisContext,
+			CancellationToken cancellationToken)
+		{
 			var methodDeclarationSyntax = analysisContext.Node as MethodDeclarationSyntax;
-			foreach (var invocationSyntax in methodDeclarationSyntax.DescendantNodes(_=>true).OfType<InvocationExpressionSyntax>())
+			Debug.Assert(methodDeclarationSyntax != null, "methodDeclarationSyntax != null");
+			foreach (
+				var invocationSyntax in methodDeclarationSyntax.DescendantNodes(_ => true).OfType<InvocationExpressionSyntax>())
 			{
 				var invocationSyntaxExpression = invocationSyntax.Expression as MemberAccessExpressionSyntax;
 				if (invocationSyntaxExpression == null)
 				{
 					continue;
 				}
-				var parentdecl = invocationSyntaxExpression.Ancestors().OfType<MethodDeclarationSyntax>();
 				var descendantExpressionNodes = invocationSyntaxExpression.DescendantNodes().ToArray();
 				// assumes identifier in use is the first element (IBus), and the method invoked on it
 				// is the second
@@ -101,7 +110,7 @@ namespace PRI.Messaging.Patterns.Analyzer
 					continue;
 				}
 				var semanticModel = analysisContext.SemanticModel;
-				var invokedIdentifierTypeInfo = semanticModel.GetTypeInfo(invokedIdentifierName).Type;
+				var invokedIdentifierTypeInfo = semanticModel.GetTypeInfo(invokedIdentifierName, cancellationToken).Type;
 				if (invokedIdentifierTypeInfo == null || invokedIdentifierTypeInfo.TypeKind == TypeKind.Error)
 				{
 					continue;
@@ -112,12 +121,12 @@ namespace PRI.Messaging.Patterns.Analyzer
 				}
 
 				var methodExpression = descendantExpressionNodes.ElementAt(1);
-				var methodSymbolInfo = semanticModel.GetSymbolInfo(methodExpression).Symbol as IMethodSymbol;
+				var methodSymbolInfo = semanticModel.GetSymbolInfo(methodExpression, cancellationToken).Symbol as IMethodSymbol;
 				if (methodSymbolInfo == null)
 				{
 					return;
 				}
-				if (IsRequestAsync(methodSymbolInfo))
+				if (CodeAnalysisExtensions.IsRequestAsync(methodSymbolInfo))
 				{
 					if (!(invocationSyntax.Parent is AwaitExpressionSyntax))
 					{
@@ -140,7 +149,7 @@ namespace PRI.Messaging.Patterns.Analyzer
 						}
 						parent = parent.Parent;
 					}
-					var genericNameSyntax = (GenericNameSyntax) invocationSyntaxExpression.Name;//.TypeArgumentList
+					var genericNameSyntax = (GenericNameSyntax) invocationSyntaxExpression.Name; //.TypeArgumentList
 					if (parentTryStatement == null)
 					{
 						if (genericNameSyntax.TypeArgumentList.Arguments.Count > 2)
@@ -155,7 +164,7 @@ namespace PRI.Messaging.Patterns.Analyzer
 					{
 						// get catch type
 						var exceptionType = typeof(ReceivedErrorEventException<>);
-						var firstRightCatch = parentTryStatement.GetFirstCatchClauseByType(semanticModel, exceptionType);
+						var firstRightCatch = parentTryStatement.GetFirstCatchClauseByType(semanticModel, exceptionType, cancellationToken);
 						if (firstRightCatch == null)
 						{
 							var diagnostic = Diagnostic.Create(RuleMp0101,
@@ -165,7 +174,7 @@ namespace PRI.Messaging.Patterns.Analyzer
 						}
 						else
 						{
-							var errorType = semanticModel.GetTypeInfo(firstRightCatch.Declaration.Type).Type as INamedTypeSymbol;
+							var errorType = semanticModel.GetTypeInfo(firstRightCatch.Declaration.Type, cancellationToken).Type as INamedTypeSymbol;
 							if (errorType == null)
 							{
 								// TODO: diagnose?
@@ -174,7 +183,7 @@ namespace PRI.Messaging.Patterns.Analyzer
 							{
 								var catchErrorEventType = errorType.TypeArguments[0];
 								var argumentErrorEventType =
-									semanticModel.GetTypeInfo(genericNameSyntax.TypeArgumentList.Arguments[2]).Type;
+									semanticModel.GetTypeInfo(genericNameSyntax.TypeArgumentList.Arguments[2], cancellationToken).Type;
 								// check that the type parameter to the error type is the same as the error
 								// event parameter in the RequestAsync invocation
 								if (!argumentErrorEventType.Equals(catchErrorEventType))
@@ -191,28 +200,10 @@ namespace PRI.Messaging.Patterns.Analyzer
 					// hooking them up where other bus.AddHandlers are called and replace RequestAsync with Send
 					// with TODOs to verify storage of state and retrieval of state
 				}
-
-				var text = invocationSyntax.ToString();
-
 			}
-			//foreach (var x in methodDeclarationSyntax.Body.Statements)
-			//{
-			//	var text = x.ToString();
-			//}
 		}
 
-		private bool IsRequestAsync(IMethodSymbol methodSymbolInfo)
-		{
-			if (methodSymbolInfo.Arity == 0 || !methodSymbolInfo.IsGenericMethod) return false;
-			var matchingMethod = Helpers.GetRequestAsyncInvocationMethodInfo(methodSymbolInfo);
-			if (matchingMethod != null)
-			{
-				return true;
-			}
-			return false;
-		}
-
-		private static bool ImplementsIBus(ITypeSymbol invokedIdentifierTypeInfo)
+		private bool ImplementsIBus(ITypeSymbol invokedIdentifierTypeInfo)
 		{
 			var type = _type;
 			if (_iBusSymbol != null)
@@ -243,14 +234,17 @@ namespace PRI.Messaging.Patterns.Analyzer
 			// TODO: Check initializer?
 		}
 
-		private static void AnalyzeFieldPropertySymbol(SymbolAnalysisContext context)
+		private void AnalyzeFieldPropertySymbol(SymbolAnalysisContext context)
 		{
 			var fieldSymbol = context.Symbol as IFieldSymbol;
 			ITypeSymbol type;
 			if (fieldSymbol == null)
 			{
 				var propertySymbol = context.Symbol as IPropertySymbol;
-				if (propertySymbol == null) return;
+				if (propertySymbol == null)
+				{
+					return;
+				}
 				type = propertySymbol.Type;
 			}
 			else
@@ -259,7 +253,9 @@ namespace PRI.Messaging.Patterns.Analyzer
 			}
 
 			if (type.AllInterfaces.Any(i => i.Name == _type.Name))
+			{
 				_iBusSymbol = type;
+			}
 		}
 	}
 }

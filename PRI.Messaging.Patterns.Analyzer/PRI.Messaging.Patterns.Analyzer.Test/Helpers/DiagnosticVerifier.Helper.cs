@@ -5,6 +5,7 @@ using Microsoft.CodeAnalysis.Text;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.IO;
 using System.Linq;
 using PRI.Messaging.Patterns;
 using PRI.Messaging.Primitives;
@@ -23,6 +24,12 @@ namespace TestHelper
 		private static readonly MetadataReference CodeAnalysisReference = MetadataReference.CreateFromFile(typeof(Compilation).Assembly.Location);
 		private static readonly MetadataReference Messaging_PatternsReference = MetadataReference.CreateFromFile(typeof(Bus).Assembly.Location);
 		private static readonly MetadataReference Messaging_PrimitivesReference = MetadataReference.CreateFromFile(typeof(IBus).Assembly.Location);
+		private static readonly MetadataReference DebugReference = MetadataReference.CreateFromFile(
+			Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
+				@"Reference Assemblies\microsoft\framework\.netframework\v4.6\facades\System.Diagnostics.Debug.dll"));
+		private static readonly MetadataReference RuntimeLibraryReference = MetadataReference.CreateFromFile(
+			Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
+				@"Reference Assemblies\Microsoft\Framework\.NETFramework\v4.6\Facades\System.Runtime.dll"));
 
 		internal static string DefaultFilePathPrefix = "Test";
 		internal static string CSharpDefaultFileExt = "cs";
@@ -158,6 +165,8 @@ namespace TestHelper
 				.AddMetadataReference(projectId, CSharpSymbolsReference)
 				.AddMetadataReference(projectId, CodeAnalysisReference)
 				.AddMetadataReference(projectId, Messaging_PrimitivesReference)
+				.AddMetadataReference(projectId, RuntimeLibraryReference)
+				.AddMetadataReference(projectId, DebugReference)
 				.AddMetadataReference(projectId, Messaging_PatternsReference);
 
 			int count = 0;

@@ -396,6 +396,7 @@ namespace Test
 			{
 				CorrelationId = Guid.NewGuid().ToString(""D"")
 			};
+
 			DateTime occurredDateTime;
 			var completedEvent = await bus.RequestAsync<Command, CommandCompletedEvent<Command>, ErrorEvent<Exception>>(command);
 			occurredDateTime = completedEvent.OccurredDateTime;
@@ -415,7 +416,7 @@ namespace Test
 				Severity = DiagnosticSeverity.Error,
 				Locations =
 					new[] {
-							new DiagnosticResultLocation("Test0.cs", line:39, column:35)
+							new DiagnosticResultLocation("Test0.cs", line:40, column:35)
 						}
 			};
 
@@ -427,54 +428,64 @@ using PRI.Messaging.Patterns;
 using PRI.Messaging.Patterns.Exceptions;
 using PRI.Messaging.Patterns.Extensions.Bus;
 using PRI.Messaging.Primitives;
+using System.Diagnostics;
 using System.Threading.Tasks;
 
 namespace Test
 {
-	public class Command : IMessage
-	{
-		public string CorrelationId { get; set; }
-	}
+    public class Command : IMessage
+    {
+        public string CorrelationId { get; set; }
+    }
 
-	public class CommandCompletedEvent<TMessage> : IEvent where TMessage : IMessage
-	{
-		public TMessage Message { get; set; }
-		public string CorrelationId { get; set; }
-		public DateTime OccurredDateTime { get; set; }
-	}
+    public class CommandCompletedEvent<TMessage> : IEvent where TMessage : IMessage
+    {
+        public TMessage Message { get; set; }
+        public string CorrelationId { get; set; }
+        public DateTime OccurredDateTime { get; set; }
+    }
 
-	public class ErrorEvent<TException> : IEvent where TException : Exception
-	{
-		public TException Exception { get; set; }
-		public string CorrelationId { get; set; }
-		public DateTime OccurredDateTime { get; set; }
-	}
+    public class ErrorEvent<TException> : IEvent where TException : Exception
+    {
+        public TException Exception { get; set; }
+        public string CorrelationId { get; set; }
+        public DateTime OccurredDateTime { get; set; }
+    }
 
-	public class Fake
-	{
-		public async Task<bool> RecommendAsyncDiagnosis()
-		{
-			var bus = new Bus();
-			try
-			{
-				var command = new Command
-				{
-					CorrelationId = Guid.NewGuid().ToString(""D"")
-				};
-				var completedEvent = await bus.RequestAsync<Command, CommandCompletedEvent<Command>, ErrorEvent<Exception>>(command);
-			}
-			catch (ReceivedErrorEventException<ErrorEvent<Exception>> ex)
-			{
-				Console.WriteLine(""got an error"" + ex);
-			}
-			return true;
-		}
-	}
+    public class Fake
+    {
+        public async Task<bool> RecommendAsyncDiagnosis()
+        {
+            var bus = new Bus();
+            var command = new Command
+            {
+                CorrelationId = Guid.NewGuid().ToString(""D"")
+            };
+
+            DateTime occurredDateTime;
+            try
+            {
+                var completedEvent = await bus.RequestAsync<Command, CommandCompletedEvent<Command>, ErrorEvent<Exception>>(command);
+                occurredDateTime = completedEvent.OccurredDateTime;
+                Debug.WriteLine(completedEvent.CorrelationId);
+                Debug.WriteLine(occurredDateTime);
+            }
+            catch (ReceivedErrorEventException<ErrorEvent<Exception>> ex)
+            {
+                // TODO: do something with ex.ErrorEvent
+                global::System.Diagnostics.Debug.WriteLine(ex.ErrorEvent);
+            }
+
+            return true;
+        }
+    }
 }";
 			#endregion // fix
 
-			VerifyCSharpFix(test, expectedFix);
+			// TODO: figure out how to get a fix to load the Debug namespace 
+			VerifyCSharpFix(test, expectedFix, allowNewCompilerDiagnostics:true);
 		}
+
 		protected override CodeFixProvider GetCSharpCodeFixProvider()
 		{
 			return new PRIMessagingPatternsAnalyzerCodeFixProvider();

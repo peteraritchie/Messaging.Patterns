@@ -1,5 +1,4 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -7,7 +6,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Editing;
-using PRI.Messaging.Patterns.Analyzer.Utility;
+using Microsoft.CodeAnalysis.Text;
 
 static internal class Extensions
 {
@@ -43,145 +42,6 @@ static internal class Extensions
 		return typeSyntax.ToDisplayString(model, SymbolDisplayFormat);
 	}
 
-	public static IEnumerable<T> MergeSorted<T>(this SortedSet<T> first, SortedSet<T> second)
-	{
-		return first.AsOrdered().MergeSorted(second.AsOrdered(), Comparer<T>.Default);
-	}
-
-	public static IEnumerable<T> MergeSorted<T>(this SortedSet<T> first, IOrderedEnumerable<T> second)
-	{
-		return first.AsOrdered().MergeSorted(second, Comparer<T>.Default);
-	}
-
-	public static IEnumerable<T> MergeSorted<T>(this IOrderedEnumerable<T> first, SortedSet<T> second)
-	{
-		return first.MergeSorted(second.AsOrdered(), Comparer<T>.Default);
-	}
-
-	public static IEnumerable<T> MergeSorted<T>(this IOrderedEnumerable<T> first, IOrderedEnumerable<T> second)
-	{
-		return first.MergeSorted(second, Comparer<T>.Default);
-	}
-
-	public static IOrderedEnumerable<T> AsOrdered<T>(this SortedSet<T> set)
-	{
-		return new SortedCollectionOrderedEnumerable<T>(set);
-	}
-
-	public static IOrderedEnumerable<T2> AsOrdered<T1,T2>(this SortedSet<T1> set, Func<T1, T2> selector)
-	{
-		return new SortedCollectionOrderedEnumerable<T2>(set.Select(selector));
-	}
-
-	public static IEnumerable<T> MergeSorted<T>(this IOrderedEnumerable<T> first, IOrderedEnumerable<T> second, Comparer<T> comparer)
-	{
-		using (var firstEnumerator = first.GetEnumerator())
-		using (var secondEnumerator = second.GetEnumerator())
-		{
-
-			var elementsLeftInFirst = firstEnumerator.MoveNext();
-			var elementsLeftInSecond = secondEnumerator.MoveNext();
-			while (elementsLeftInFirst || elementsLeftInSecond)
-			{
-				if (!elementsLeftInFirst)
-				{
-					do
-					{
-						yield return secondEnumerator.Current;
-					} while (secondEnumerator.MoveNext());
-					yield break;
-				}
-
-				if (!elementsLeftInSecond)
-				{
-					do
-					{
-						yield return firstEnumerator.Current;
-					} while (firstEnumerator.MoveNext());
-					yield break;
-				}
-
-				if (comparer.Compare(firstEnumerator.Current, secondEnumerator.Current) < 0)
-				{
-					yield return firstEnumerator.Current;
-					elementsLeftInFirst = firstEnumerator.MoveNext();
-				}
-				else
-				{
-					yield return secondEnumerator.Current;
-					elementsLeftInSecond = secondEnumerator.MoveNext();
-				}
-			}
-		}
-	}
-
-	public class SortedCollectionOrderedEnumerable<T> : IOrderedEnumerable<T>
-	{
-		private readonly IEnumerable<T> _wrappedCollection;
-
-		public SortedCollectionOrderedEnumerable(SortedSet<T> collection)
-			: this((IEnumerable<T>)collection)
-		{
-			if (collection == null)
-			{
-				throw new ArgumentNullException(nameof(collection));
-			}
-		}
-
-#if NOT_PORTABLE
-		public SortedCollectionOrderedEnumerable(SortedList<T> collection)
-			: this((IEnumerable<T>)collection)
-		{
-			if (collection == null)
-			{
-				throw new ArgumentNullException(nameof(collection));
-			}
-		}
-#endif
-
-		public SortedCollectionOrderedEnumerable(IEnumerable<T> wrappedCollection)
-		{
-			_wrappedCollection = wrappedCollection;
-		}
-
-		public IOrderedEnumerable<T> CreateOrderedEnumerable<TKey>(Func<T, TKey> keySelector, IComparer<TKey> comparer, bool @descending)
-		{
-			throw new NotImplementedException();
-		}
-
-		public IEnumerator<T> GetEnumerator()
-		{
-			return _wrappedCollection.GetEnumerator();
-		}
-
-		IEnumerator IEnumerable.GetEnumerator()
-		{
-			return GetEnumerator();
-		}
-	}
-
-	/// <summary>
-	/// Generates the type syntax.
-	/// </summary>
-	public static TypeSyntax AsTypeSyntax(this Type type)
-	{
-		string name = type.Name.Replace('+', '.');
-		var genericArgs = type.GenericTypeArguments;
-
-		if (genericArgs != null && genericArgs.Any())
-		{
-			// Get the C# representation of the generic type minus its type arguments.
-			name = name.Substring(0, name.IndexOf("`", StringComparison.Ordinal));
-
-			// Generate the name of the generic type.
-			return SyntaxFactory.GenericName(SyntaxFactory.Identifier(name),
-				SyntaxFactory.TypeArgumentList(SyntaxFactory.SeparatedList(genericArgs.Select(AsTypeSyntax)))
-			);
-		}
-		else
-			return SyntaxFactory.ParseTypeName(name);
-	}
-
 	/// <summary>
 	/// Generates the type syntax.
 	/// </summary>
@@ -202,30 +62,6 @@ static internal class Extensions
 		// Generate the name of the generic type.
 		return SyntaxFactory.GenericName(SyntaxFactory.Identifier(name)).WithTypeArgumentList(
 			SyntaxFactory.TypeArgumentList(SyntaxFactory.SeparatedList(typeParams.Select(generator.TypeExpression).Cast<TypeSyntax>())));
-	}
-
-	public static IEnumerable<SyntaxToken> GetTokens(this IEnumerable<SyntaxNode> nodes)
-	{
-		foreach (var node in nodes)
-		{
-			var equals = node as EqualsValueClauseSyntax;
-			if (equals != null)
-			{
-				yield return equals.EqualsToken;
-			}
-			else
-			{
-				var assignment = node as AssignmentExpressionSyntax;
-				if (assignment != null)
-				{
-					yield return assignment.OperatorToken;
-				}
-				else
-				{
-					throw new NotSupportedException($"node type {node.GetType().FullName} not supported in GetTokens");
-				}
-			}
-		}
 	}
 
 	public static SyntaxNode GetAncestorStatement(this SyntaxToken token)
@@ -267,19 +103,88 @@ static internal class Extensions
 		return newRoot as T;
 	}
 
-	public static VariableDeclaratorSyntax[] GetReferencingVariableDeclarations(this SyntaxToken token, SemanticModel model)
+	public static TextSpan GetSpanOfAssignmentDependenciesInSpan(this MemberDeclarationSyntax containingMethod,
+		TextSpan textSpan, SemanticModel model)
 	{
-		var newSymbol = model.GetSymbolInfo(token.Parent).Symbol;
-		if (newSymbol == null)
+		var resultSpan = textSpan;
+		List<SyntaxNode> dependentAssignments = new List<SyntaxNode>();
+		var tokenKeyComparer = Comparer<int>.Default;
+		do
 		{
-			return EmptyCache<VariableDeclaratorSyntax>.EmptyArray;
-		}
-		var symbolDeclarators = newSymbol.DeclaringSyntaxReferences;
-		if (symbolDeclarators.IsEmpty)
+			SyntaxNode[] assignments = containingMethod.DescendantNodes(resultSpan)
+				.Where(e => (e is AssignmentExpressionSyntax || e is EqualsValueClauseSyntax) && !dependentAssignments.Contains(e)).ToArray();
+			if (!assignments.Any()) // no newly found assignments, done
+			{
+				break;
+			}
+			dependentAssignments.AddRange(assignments);
+			IEnumerable<ISymbol> symbolsAssigned = dependentAssignments.Select<SyntaxNode, ISymbol>(e => GetAssignmentSymbol(e, model));
+			SortedSet<SyntaxToken> references = new SortedSet<SyntaxToken>(Comparer<SyntaxToken>
+				.Create((token, syntaxToken) => tokenKeyComparer.Compare(
+					token.SpanStart, syntaxToken.SpanStart)));
+			//references.UnionWith(assignments.GetTokens());
+			foreach (ISymbol symbol in symbolsAssigned)
+			{
+				var symbolReferences = Enumerable.Where<SyntaxToken>(GetSymbolReferences(containingMethod, symbol), e => e.SpanStart >= textSpan.Start);
+				references.UnionWith(symbolReferences);
+			}
+			resultSpan = GetBoundingSpan(references);
+		} while (true);
+		return resultSpan;
+	}
+
+	public static TextSpan GetBoundingSpan(this IEnumerable<SyntaxToken> symbolReferences)
+	{
+		var locations = symbolReferences
+			.Select(token => token.GetAncestorStatement().GetLocation()) // ancestor statement or entire line?
+			.OrderBy(e => e.SourceSpan.Start);
+		return GetBoundingSpan(locations);
+	}
+
+	public static IEnumerable<SyntaxToken> GetSymbolReferences(this MemberDeclarationSyntax containingMethod, ISymbol symbol)
+	{
+		return containingMethod
+			.DescendantTokens()
+			.Where(e => e.Kind() == SyntaxKind.IdentifierToken && e.ValueText == symbol.Name);
+	}
+
+	public static TextSpan GetBoundingSpan(this IOrderedEnumerable<Location> locations)
+	{
+		return new TextSpan(locations.First().SourceSpan.Start, locations.Last().SourceSpan.End - locations.First().SourceSpan.Start + 1);
+	}
+
+	public static MemberDeclarationSyntax GetContainingMethod(this SyntaxNode invocationParent)
+	{
+		var parentMethod = invocationParent;
+		while (parentMethod != null && !(parentMethod is MemberDeclarationSyntax))
 		{
-			return EmptyCache<VariableDeclaratorSyntax>.EmptyArray;
+			parentMethod = parentMethod.Parent;
 		}
-		var syntaxes = symbolDeclarators.Select(e => e.GetSyntax()).OfType<VariableDeclaratorSyntax>().ToArray();
-		return syntaxes;
+
+		var containingMethod = parentMethod as MemberDeclarationSyntax;
+		return containingMethod;
+	}
+
+	public static ISymbol GetAssignmentSymbol(this SyntaxNode parent, SemanticModel model)
+	{
+		var simpleAssignment = parent as AssignmentExpressionSyntax;
+
+		ISymbol symbol = null;
+
+		if (simpleAssignment != null)
+		{
+			ExpressionSyntax variable = simpleAssignment.Left;
+			symbol = model.GetSymbolInfo(variable).Symbol;
+		}
+		else
+		{
+			var equals = parent as EqualsValueClauseSyntax;
+			var variableDeclarator = @equals?.Parent as VariableDeclaratorSyntax;
+			if (variableDeclarator != null)
+			{
+				symbol = model.GetDeclaredSymbol(variableDeclarator);
+			}
+		}
+		return symbol;
 	}
 }

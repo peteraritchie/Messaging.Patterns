@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics;
 using System.Threading.Tasks;
 using PRI.Messaging.Patterns;
 using PRI.Messaging.Patterns.Exceptions;
@@ -19,11 +20,36 @@ namespace Test
 		public DateTime OccurredDateTime { get; set; }
 	}
 
+	public class CommandCompletedEventHandler<TMessage> : IConsumer<CommandCompletedEvent<TMessage>> where TMessage : IMessage
+	{
+		public void Handle(CommandCompletedEvent<TMessage> commandCompletedEvent)
+		{
+			DateTime occurredDateTime;
+			occurredDateTime = commandCompletedEvent.OccurredDateTime;
+			Debug.WriteLine(commandCompletedEvent.CorrelationId);
+			Debug.WriteLine(occurredDateTime);
+		}
+	}
+
 	public class ErrorEvent<TException> : IEvent where TException : Exception
 	{
 		public TException Exception { get; set; }
 		public string CorrelationId { get; set; }
 		public DateTime OccurredDateTime { get; set; }
+	}
+
+	// get name of event
+	// get constraints, if event generic and has constraints
+	// create class with name of event with "Handler" prepended to the name, or inserted between name and type parameters
+	// implement Handle method
+	// copy catch(ReceivedErrorEventException... body to Handle
+	// replace reference to ReceivedErrorEventException.ErrorEvent with argument identifier
+	public class ErrorEventHandler<TException> : IConsumer<ErrorEvent<TException>> where TException : Exception
+	{
+		public void Handle(ErrorEvent<TException> errorEvent)
+		{
+			global::System.Diagnostics.Debug.WriteLine(errorEvent);
+		}
 	}
 
 	public class Fake

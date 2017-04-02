@@ -12,6 +12,7 @@ using Microsoft.CodeAnalysis.CodeActions;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Editing;
+using PRI.Messaging.Patterns.Analyzer.Utility;
 using PRI.Messaging.Patterns.Exceptions;
 using PRI.Messaging.Primitives;
 
@@ -21,8 +22,8 @@ namespace PRI.Messaging.Patterns.Analyzer
 	public class PRIMessagingPatternsAnalyzerCodeFixProvider : CodeFixProvider
 	{
 		public sealed override ImmutableArray<string> FixableDiagnosticIds
-			=> ImmutableArray.Create(PRIMessagingPatternsAnalyzer.RuleMp0100.Id, PRIMessagingPatternsAnalyzer.RuleMp0101.Id/*,
-				PRIMessagingPatternsAnalyzer.RuleMp0102.Id, PRIMessagingPatternsAnalyzer.RuleMp0103.Id*/);
+			=> ImmutableArray.Create(PRIMessagingPatternsAnalyzer.RuleMp0100.Id, PRIMessagingPatternsAnalyzer.RuleMp0101.Id,
+				PRIMessagingPatternsAnalyzer.RuleMp0102.Id/*, PRIMessagingPatternsAnalyzer.RuleMp0103.Id*/);
 
 		// See https://github.com/dotnet/roslyn/blob/master/docs/analyzers/FixAllProvider.md for more information on Fix All Providers
 		public sealed override FixAllProvider GetFixAllProvider() => WellKnownFixAllProviders.BatchFixer;
@@ -33,6 +34,112 @@ namespace PRI.Messaging.Patterns.Analyzer
 				{"MP0100", new KeyValuePair<string, Func<Diagnostic, Document, CancellationToken, Task<Document>>>("bleah", InvokeMp0100)},
 				{"MP0101", new KeyValuePair<string, Func<Diagnostic, Document, CancellationToken, Task<Document>>>("bleah", InvokeMp0101)},
 			};
+		private readonly Dictionary<string, KeyValuePair<string, Func<Diagnostic, Solution, Document, CancellationToken, Task<Solution>>>> _solutionDiagnosticInvocations
+			= new Dictionary<string, KeyValuePair<string, Func<Diagnostic, Solution, Document, CancellationToken, Task<Solution>>>>
+			{
+				{"MP0102", new KeyValuePair<string, Func<Diagnostic, Solution, Document, CancellationToken, Task<Solution>>>("bleah", InvokeMp0102)},
+			};
+
+		private static async Task<Solution> InvokeMp0102(Diagnostic diagnostic, Solution solution, Document document, CancellationToken cancellationToken)
+		{
+			var root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
+			var subjectToken = root.FindToken(diagnostic.Location.SourceSpan.Start);
+			var invocation =
+				subjectToken.Parent.AncestorsAndSelf().OfType<InvocationExpressionSyntax>().First();
+			var model = await document.GetSemanticModelAsync(cancellationToken);
+			var methodSymbolInfo = model.GetSymbolInfo(invocation).Symbol as IMethodSymbol;
+
+			if (methodSymbolInfo == null || methodSymbolInfo.TypeArguments.Length < 3)
+			{
+				throw new InvalidOperationException();
+			}
+			ITypeSymbol errorEventType, messageType, eventType;
+			GetRequestAsyncInfo(methodSymbolInfo, out messageType, out eventType, out errorEventType);
+
+			// TODO: create new document
+			var namedEventTypeSymbol = (INamedTypeSymbol)eventType;
+			var generator = SyntaxGenerator.GetGenerator(document);
+			// need to create a new type from eventType that is non-constructed
+			var typeSyntaxes = namedEventTypeSymbol.TypeParameters.Select(e=>(TypeSyntax)generator.TypeExpression(e));
+			var classDeclaration = SyntaxFactory.ClassDeclaration($"{eventType.Name}Handler")
+				.WithBaseList(
+					SyntaxFactory.BaseList(
+						SyntaxFactory.SeparatedList<BaseTypeSyntax>(new[]
+						{
+							SyntaxFactory.SimpleBaseType(
+								SyntaxFactory.GenericName("IConsumer")
+									.WithTypeArgumentList(SyntaxFactory.TypeArgumentList(
+										SyntaxFactory.SeparatedList(new[]
+										{
+											(TypeSyntax) SyntaxFactory.GenericName(namedEventTypeSymbol.Name)
+												.WithTypeArgumentList(
+													SyntaxFactory.TypeArgumentList(
+														SyntaxFactory.SeparatedList(
+															namedEventTypeSymbol.ConstructedFrom.TypeArguments
+																.Select(e => (TypeSyntax) generator.TypeExpression(e)))))
+										})
+										//.Select(e => SyntaxFactory.TypeParameter(e.GetFirstToken()))
+										//new[] {eventTypeExpression}
+									)))
+						})))
+						.WithModifiers(SyntaxFactory.TokenList(SyntaxFactory.Token(SyntaxKind.PublicKeyword)));
+
+			if (namedEventTypeSymbol.IsGenericType)
+			{
+				classDeclaration =
+					classDeclaration.WithTypeParameterList(
+							SyntaxFactory.TypeParameterList(
+								SyntaxFactory.SeparatedList(
+									namedEventTypeSymbol.TypeParameters.Select(generator.TypeExpression)
+										.Select(e => SyntaxFactory.TypeParameter(e.GetFirstToken())))))
+						.AddConstraintClauses(
+							namedEventTypeSymbol.TypeParameters
+								.Select(e => SyntaxFactory.TypeParameterConstraintClause(
+									SyntaxFactory.IdentifierName(e.Name),
+									SyntaxFactory.SeparatedList(Get(e, generator)))).ToArray());
+				string text = classDeclaration.NormalizeWhitespace().ToString();
+			}
+			throw new NotImplementedException();
+			// add file to project
+
+			return solution;
+		}
+
+		private static IEnumerable<TypeParameterConstraintSyntax> Get(ITypeParameterSymbol typeParameterSymbol, SyntaxGenerator generator)
+		{
+			foreach (var type in typeParameterSymbol.ConstraintTypes)
+				yield return SyntaxFactory.TypeConstraint((TypeSyntax) generator.TypeExpression(type));
+			if (typeParameterSymbol.HasConstructorConstraint)
+			{
+				yield return SyntaxFactory.ConstructorConstraint();
+			}
+			if (typeParameterSymbol.HasReferenceTypeConstraint)
+			{
+				yield return SyntaxFactory.ClassOrStructConstraint(SyntaxKind.ClassConstraint);
+			}
+			if (typeParameterSymbol.HasValueTypeConstraint)
+			{
+				yield return SyntaxFactory.ClassOrStructConstraint(SyntaxKind.StructConstraint);
+			}
+		}
+
+		//private static TypeParameterConstraintClauseSyntax Get(ImmutableArray<ITypeParameterSymbol> typeParameterSymbols, SyntaxGenerator generator)
+		//{
+		//	foreach (var typeParameterSymbol in typeParameterSymbols)
+		//	{
+		//		generator.WithTypeConstraint(()
+		//		yield return SyntaxFactory.TypeParameterConstraintClause(SyntaxFactory.IdentifierName(typeParameterSymbol.Name), typeParameterSymbol.ConstraintTypes.Select(e=>SyntaxFactory.TypeParameterConstraintClause(e)))
+		//	}
+		//	throw new NotImplementedException();
+		//}
+
+
+		private static void GetRequestAsyncInfo(IMethodSymbol methodSymbolInfo, out ITypeSymbol messageType, out ITypeSymbol eventType, out ITypeSymbol errorEventType)
+		{
+			messageType = methodSymbolInfo.TypeArguments.ElementAt(0);
+			eventType = methodSymbolInfo.TypeArguments.ElementAt(1);
+			errorEventType = methodSymbolInfo.TypeArguments.ElementAt(2);
+		}
 
 		private static async Task<Document> InvokeMp0101(Diagnostic diagnostic, Document document,
 			CancellationToken cancellationToken)
@@ -97,7 +204,8 @@ namespace PRI.Messaging.Patterns.Analyzer
 
 			// assume, RequestAsync return is assigned to something (covered by other rule)
 			// 1: get 3rd type parameter in invocation
-			var errorEventType = methodSymbolInfo.TypeArguments.ElementAt(2);
+			ITypeSymbol errorEventType, messageType, eventType;
+			GetRequestAsyncInfo(methodSymbolInfo, out messageType, out eventType, out errorEventType);
 			var generator = SyntaxGenerator.GetGenerator(document);
 			var exceptionArgumentsInfo = new Dictionary<string, TypeSyntax>
 			{
@@ -125,21 +233,31 @@ namespace PRI.Messaging.Patterns.Analyzer
 		public sealed override Task RegisterCodeFixesAsync(CodeFixContext context)
 		{
 			var document = context.Document;
+			var solution = context.Document.Project.Solution;
 
 			foreach (var diagnostic in context.Diagnostics)
 			{
-				if (!_documentDiagnosticInvocations.ContainsKey(diagnostic.Id))
+				if (_documentDiagnosticInvocations.ContainsKey(diagnostic.Id))
 				{
-					continue;
+					// Register a code action that will invoke the fix.
+					var documentDiagnosticInvocation = _documentDiagnosticInvocations[diagnostic.Id];
+					context.RegisterCodeFix(
+						CodeAction.Create(
+							title: documentDiagnosticInvocation.Key,
+							createChangedDocument: c => documentDiagnosticInvocation.Value(diagnostic, document, c),
+							equivalenceKey: diagnostic.Id),
+						diagnostic);
 				}
-				// Register a code action that will invoke the fix.
-				var documentDiagnosticInvocation = _documentDiagnosticInvocations[diagnostic.Id];
-				context.RegisterCodeFix(
-					CodeAction.Create(
-						title: documentDiagnosticInvocation.Key,
-						createChangedDocument: c => documentDiagnosticInvocation.Value(diagnostic, document, c),
-						equivalenceKey: diagnostic.Id),
-					diagnostic);
+				else if (_solutionDiagnosticInvocations.ContainsKey(diagnostic.Id))
+				{
+					var solutionDiagnosticInvocation = _solutionDiagnosticInvocations[diagnostic.Id];
+					context.RegisterCodeFix(
+						CodeAction.Create(
+							title:"",
+							createChangedSolution: c => solutionDiagnosticInvocation.Value(diagnostic, solution, document, c),
+							equivalenceKey: diagnostic.Id),
+						diagnostic);
+				}
 			}
 			return Task.FromResult(true);
 		}

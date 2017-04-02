@@ -2,6 +2,7 @@ using System;
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Linq;
+using System.Reflection;
 using System.Threading;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -15,7 +16,7 @@ namespace PRI.Messaging.Patterns.Analyzer
 	[DiagnosticAnalyzer(LanguageNames.CSharp)]
 	public class PRIMessagingPatternsAnalyzer : DiagnosticAnalyzer
 	{
-		public static readonly DiagnosticDescriptor RuleMp0100 =
+		public static readonly DiagnosticDescriptor RuleMp0100 = //Call to RequestAsync not awaited
 			new DiagnosticDescriptor("MP0100",
 				GetResourceString(nameof(Resources.Mp0100Title)),
 				GetResourceString(nameof(Resources.Mp0100MessageFormat)),
@@ -23,7 +24,7 @@ namespace PRI.Messaging.Patterns.Analyzer
 				DiagnosticSeverity.Warning,
 				isEnabledByDefault: true,
 				description: GetResourceString(nameof(Resources.Mp0100Description)));
-		public static readonly DiagnosticDescriptor RuleMp0101 =
+		public static readonly DiagnosticDescriptor RuleMp0101 = // Call to RequestAsync with error event but no try.catch.
 			new DiagnosticDescriptor("MP0101",
 				GetResourceString(nameof(Resources.Mp0101Title)),
 				GetResourceString(nameof(Resources.Mp0101MessageFormat)),
@@ -31,7 +32,7 @@ namespace PRI.Messaging.Patterns.Analyzer
 				DiagnosticSeverity.Error,
 				isEnabledByDefault: true,
 				description: GetResourceString(nameof(Resources.Mp0101Description)));
-		public static readonly DiagnosticDescriptor RuleMp0102 =
+		public static readonly DiagnosticDescriptor RuleMp0102 = // consider not using RequestAsync
 			new DiagnosticDescriptor("MP0102",
 				GetResourceString(nameof(Resources.Mp0102Title)),
 				GetResourceString(nameof(Resources.Mp0102MessageFormat)),
@@ -126,6 +127,7 @@ namespace PRI.Messaging.Patterns.Analyzer
 				{
 					return;
 				}
+
 				if (CodeAnalysisExtensions.IsRequestAsync(methodSymbolInfo))
 				{
 					if (!(invocationSyntax.Parent is AwaitExpressionSyntax))
@@ -191,6 +193,25 @@ namespace PRI.Messaging.Patterns.Analyzer
 									Debug.WriteLine("arguments are not right");
 									// TODO: diagnose
 								}
+								else
+								{
+									var messageType =
+										semanticModel.GetTypeInfo(genericNameSyntax.TypeArgumentList.Arguments[0], cancellationToken).Type;
+									if (ImplementsInterface<IEvent>(messageType))
+									{
+										var diagnostic = Diagnostic.Create(RuleMp0103,
+											methodExpression.GetLocation());
+
+										analysisContext.ReportDiagnostic(diagnostic);
+									}
+									else
+									{
+										var diagnostic = Diagnostic.Create(RuleMp0102,
+											methodExpression.GetLocation());
+
+										analysisContext.ReportDiagnostic(diagnostic);
+									}
+								}
 							}
 						}
 					}
@@ -201,6 +222,22 @@ namespace PRI.Messaging.Patterns.Analyzer
 					// with TODOs to verify storage of state and retrieval of state
 				}
 			}
+		}
+
+		private bool ImplementsInterface<TInterface>(ITypeSymbol typeSymbol)
+		{
+			var type = typeof(TInterface);
+			if (!type.GetTypeInfo().IsInterface)
+			{
+				throw new ArgumentException("Type is not an interface", nameof(typeSymbol));
+			}
+			var typeCandidateSymbol = typeSymbol.Interfaces
+				.SingleOrDefault(e => e.ToString() == type.FullName);
+			if (typeCandidateSymbol == null)
+			{
+				return false;
+			}
+			return $"{typeCandidateSymbol}, {typeCandidateSymbol.ContainingAssembly.Identity}" == type.AssemblyQualifiedName;
 		}
 
 		private bool ImplementsIBus(ITypeSymbol invokedIdentifierTypeInfo)

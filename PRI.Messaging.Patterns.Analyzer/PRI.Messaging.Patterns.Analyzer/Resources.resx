@@ -146,23 +146,23 @@
     <comment>An optional longer localizable description of the diagnostic.</comment>
   </data>
   <data name="Mp0102MessageFormat" xml:space="preserve">
-    <value>Type name '{0}' contains lowercase letters</value>
+    <value>Call to RequestAsync can be replaced with IConsumer&lt;T&gt; implementations.</value>
     <comment>The format-able message the diagnostic displays.</comment>
   </data>
   <data name="Mp0102Title" xml:space="preserve">
-    <value>Type name contains lowercase letters</value>
+    <value>Consider a looser-coupled, message handler class.</value>
     <comment>The title of the diagnostic.</comment>
   </data>
   <data name="Mp0103Description" xml:space="preserve">
-    <value>Type names should be all uppercase.</value>
-    <comment>An optional longer localizable description of the diagnostic.</comment>
+    <value>RequestAsync models message-event interaction, not event-event interaction</value>
+    <comment>Consider using separate IConsumer&lt;T&gt; implementations instead of RequestAsync.</comment>
   </data>
   <data name="Mp0103MessageFormat" xml:space="preserve">
-    <value>Type name '{0}' contains lowercase letters</value>
+    <value>Sending event with RequestAsync.</value>
     <comment>The format-able message the diagnostic displays.</comment>
   </data>
   <data name="Mp0103Title" xml:space="preserve">
-    <value>Type name contains lowercase letters</value>
+    <value>RequestAsync called with event as message to send.</value>
     <comment>The title of the diagnostic.</comment>
   </data>
 </root>

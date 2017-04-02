@@ -10,23 +10,6 @@ namespace PRI.Messaging.Patterns.Analyzer
 		public static MethodInfo GetRequestAsyncInvocationMethodInfo(IMethodSymbol methodSymbolInfo)
 		{
 			var mis = typeof(BusExtensions).GetRuntimeMethods().Where(e => e.Name == nameof(BusExtensions.RequestAsync));
-			MethodInfo match = null;
-			foreach (MethodInfo mi in mis)
-			{
-				var x =
-					SquareToAngleBrackets(mi.ToString()
-						.Replace($"{mi.ReturnType} {mi.Name}",
-							$"{mi.ReturnType} {mi.DeclaringType}.{mi.Name}"));
-				var y = GetSignature(methodSymbolInfo);
-				if (x == y &&
-				    mi.DeclaringType.AssemblyQualifiedName ==
-				    $"{methodSymbolInfo.ReducedFrom.ContainingType.ToString()}, {methodSymbolInfo.ContainingAssembly.Identity}")
-				{
-					match = mi;
-					break;
-				}
-			}
-
 			var matchingMethod =
 				mis.SingleOrDefault(
 					mi =>

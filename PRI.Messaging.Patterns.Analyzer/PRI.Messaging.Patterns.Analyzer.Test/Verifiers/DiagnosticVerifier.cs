@@ -103,7 +103,7 @@ namespace TestHelper
 		/// <param name="expectedResults">Diagnostic Results that should have appeared in the code</param>
 		private static void VerifyDiagnosticResults(IEnumerable<Diagnostic> actualResults, DiagnosticAnalyzer analyzer, params DiagnosticResult[] expectedResults)
 		{
-			int expectedCount = expectedResults.Count();
+			int expectedCount = expectedResults.Length;
 			int actualCount = actualResults.Count();
 
 			if (expectedCount != actualCount)
@@ -188,14 +188,12 @@ namespace TestHelper
 			var actualLinePosition = actualSpan.StartLinePosition;
 
 			// Only check line position if there is an actual line in the real diagnostic
-			if (actualLinePosition.Line > 0)
+			if (actualLinePosition.Line > 0 && actualLinePosition.Line + 1 != expected.Line)
 			{
-				if (actualLinePosition.Line + 1 != expected.Line)
-				{
-					Assert.IsTrue(false,
-						string.Format("Expected diagnostic to be on line \"{0}\" was actually on line \"{1}\"\r\n\r\nDiagnostic:\r\n    {2}\r\n",
-							expected.Line, actualLinePosition.Line + 1, FormatDiagnostics(analyzer, diagnostic)));
-				}
+				Assert.IsTrue(false,
+					string.Format(
+						"Expected diagnostic to be on line \"{0}\" was actually on line \"{1}\"\r\n\r\nDiagnostic:\r\n    {2}\r\n",
+						expected.Line, actualLinePosition.Line + 1, FormatDiagnostics(analyzer, diagnostic)));
 			}
 
 			// Only check column position if there is an actual column position in the real diagnostic
@@ -242,7 +240,7 @@ namespace TestHelper
 							Assert.IsTrue(location.IsInSource,
 								$"Test base does not currently handle diagnostics in metadata locations. Diagnostic in metadata: {diagnostics[i]}\r\n");
 
-							string resultMethodName = diagnostics[i].Location.SourceTree.FilePath.EndsWith(".cs") ? "GetCSharpResultAt" : "GetBasicResultAt";
+							string resultMethodName = diagnostics[i].Location.SourceTree.FilePath.EndsWith(".cs", System.StringComparison.Ordinal) ? "GetCSharpResultAt" : "GetBasicResultAt";
 							var linePosition = diagnostics[i].Location.GetLineSpan().StartLinePosition;
 
 							builder.AppendFormat("{0}({1}, {2}, {3}.{4})",

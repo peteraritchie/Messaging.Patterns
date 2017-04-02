@@ -125,7 +125,7 @@ namespace PRI.Messaging.Patterns.Analyzer {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to Type name &apos;{0}&apos; contains lowercase letters.
+        ///   Looks up a localized string similar to Call to RequestAsync can be replaced with IConsumer&lt;T&gt; implementations..
         /// </summary>
         internal static string Mp0102MessageFormat {
             get {
@@ -134,7 +134,7 @@ namespace PRI.Messaging.Patterns.Analyzer {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to Type name contains lowercase letters.
+        ///   Looks up a localized string similar to Consider a looser-coupled, message handler class..
         /// </summary>
         internal static string Mp0102Title {
             get {
@@ -143,7 +143,7 @@ namespace PRI.Messaging.Patterns.Analyzer {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to Type names should be all uppercase..
+        ///   Looks up a localized string similar to RequestAsync models message-event interaction, not event-event interaction.
         /// </summary>
         internal static string Mp0103Description {
             get {
@@ -152,7 +152,7 @@ namespace PRI.Messaging.Patterns.Analyzer {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to Type name &apos;{0}&apos; contains lowercase letters.
+        ///   Looks up a localized string similar to Sending event with RequestAsync..
         /// </summary>
         internal static string Mp0103MessageFormat {
             get {
@@ -161,7 +161,7 @@ namespace PRI.Messaging.Patterns.Analyzer {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to Type name contains lowercase letters.
+        ///   Looks up a localized string similar to RequestAsync called with event as message to send..
         /// </summary>
         internal static string Mp0103Title {
             get {

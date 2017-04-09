@@ -9,6 +9,7 @@ using System.IO;
 using System.Linq;
 using PRI.Messaging.Patterns;
 using PRI.Messaging.Primitives;
+using Test;
 
 namespace TestHelper
 {
@@ -24,6 +25,7 @@ namespace TestHelper
 		private static readonly MetadataReference CodeAnalysisReference = MetadataReference.CreateFromFile(typeof(Compilation).Assembly.Location);
 		private static readonly MetadataReference Messaging_PatternsReference = MetadataReference.CreateFromFile(typeof(Bus).Assembly.Location);
 		private static readonly MetadataReference Messaging_PrimitivesReference = MetadataReference.CreateFromFile(typeof(IBus).Assembly.Location);
+		private static readonly MetadataReference MyClassLibraryReference = MetadataReference.CreateFromFile(typeof(Command).Assembly.Location);
 		private static readonly MetadataReference DebugReference = MetadataReference.CreateFromFile(
 			Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
 				@"Reference Assemblies\microsoft\framework\.netframework\v4.6\facades\System.Diagnostics.Debug.dll"));
@@ -182,6 +184,7 @@ namespace TestHelper
 				.AddMetadataReference(projectId, CSharpSymbolsReference)
 				.AddMetadataReference(projectId, CodeAnalysisReference)
 				.AddMetadataReference(projectId, Messaging_PrimitivesReference)
+				.AddMetadataReference(projectId, MyClassLibraryReference)
 				.AddMetadataReference(projectId, RuntimeLibraryReference)
 				.AddMetadataReference(projectId, DebugReference)
 				.AddMetadataReference(projectId, Messaging_PatternsReference);

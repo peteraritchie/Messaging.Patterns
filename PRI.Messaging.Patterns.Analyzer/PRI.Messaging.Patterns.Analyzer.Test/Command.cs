@@ -20,13 +20,51 @@ namespace Test
 		public DateTime OccurredDateTime { get; set; }
 	}
 
+	public class C : IMessage
+	{
+		public string CorrelationId { get; set; }
+	}
+
+	public class CHandler : IConsumer<C>
+	{
+		public void Handle(C message)
+		{
+			throw new NotImplementedException();
+		}
+
+		public void test()
+		{
+			try
+			{
+				try
+				{
+					try
+					{
+						int i;
+					}
+					finally
+					{
+					}
+
+				}
+				finally
+				{
+				}
+
+			}
+			finally
+			{
+			}
+		}
+	}
+
 	public class CommandCompletedEventHandler<TMessage> : IConsumer<CommandCompletedEvent<TMessage>> where TMessage : IMessage
 	{
 		public void Handle(CommandCompletedEvent<TMessage> commandCompletedEvent)
 		{
 			DateTime occurredDateTime;
 			occurredDateTime = commandCompletedEvent.OccurredDateTime;
-			Debug.WriteLine(commandCompletedEvent.CorrelationId);
+			Debug.WriteLine(commandCompletedEvent);
 			Debug.WriteLine(occurredDateTime);
 		}
 	}
@@ -70,6 +108,7 @@ namespace Test
 				{
 					CorrelationId = Guid.NewGuid().ToString("D")
 				};
+				bus.Send(command);
 				var completedEvent = await bus.RequestAsync<Command, CommandCompletedEvent<Command>, ErrorEvent<Exception>>(command);
 				Console.WriteLine(completedEvent.CorrelationId);
 			}
@@ -161,4 +200,27 @@ namespace Test
 			return true;
 		}
 	}
+}
+
+namespace PRI.Test
+{
+	public class ErrorEvent : IEvent
+	{
+		public Exception Exception { get; set; }
+		public string CorrelationId { get; set; }
+		public DateTime OccurredDateTime { get; set; }
+	}
+
+	public class Command : IMessage
+	{
+		public string CorrelationId { get; set; }
+	}
+
+	public class CommandCompletedEvent : IEvent
+	{
+		public Command Command { get; set; }
+		public string CorrelationId { get; set; }
+		public DateTime OccurredDateTime { get; set; }
+	}
+
 }

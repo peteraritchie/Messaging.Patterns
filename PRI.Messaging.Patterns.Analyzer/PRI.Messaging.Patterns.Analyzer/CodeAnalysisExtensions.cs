@@ -10,11 +10,13 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Editing;
+using Microsoft.CodeAnalysis.Formatting;
+using Microsoft.CodeAnalysis.Simplification;
 using Microsoft.CodeAnalysis.Text;
 
 namespace PRI.Messaging.Patterns.Analyzer
 {
-	internal static class CodeAnalysisExtensions
+	public static class CodeAnalysisExtensions
 	{
 		public static CatchClauseSyntax GetFirstCatchClauseByType(this TryStatementSyntax parentTryStatement, SemanticModel semanticModel, Type exceptionType, CancellationToken cancellationToken = default(CancellationToken))
 		{
@@ -54,7 +56,10 @@ namespace PRI.Messaging.Patterns.Analyzer
 		public static TypeSyntax AsTypeSyntax(this Type type, SyntaxGenerator generator, params ITypeSymbol[] typeParams)
 		{
 			var typeInfo = type.GetTypeInfo();
-			if (!typeInfo.IsGenericType) throw new ArgumentException(nameof(type));
+			if (!typeInfo.IsGenericType)
+			{
+				throw new ArgumentException(nameof(type));
+			}
 
 			string name = type.Name.Replace('+', '.');
 
@@ -67,11 +72,30 @@ namespace PRI.Messaging.Patterns.Analyzer
 
 			// Generate the name of the generic type.
 			return SyntaxFactory.GenericName(SyntaxFactory.Identifier(name)).WithTypeArgumentList(
-				SyntaxFactory.TypeArgumentList(SyntaxFactory.SeparatedList(typeParams.Select(generator.TypeExpression).Cast<TypeSyntax>())));
+				SyntaxFactory.TypeArgumentList(SyntaxFactory.SeparatedList(typeParams.Select(generator.TypeExpression)
+				.Cast<TypeSyntax>())));
+		}
+
+		public static SyntaxNode GetAncestorStatement(this SyntaxNode givenNode)
+		{
+			if (givenNode == null)
+			{
+				throw new ArgumentNullException(nameof(givenNode));
+			}
+			var node = givenNode.Parent;
+			while (node != null && !(node is StatementSyntax))
+			{
+				node = node.Parent;
+			}
+			return node;
 		}
 
 		public static SyntaxNode GetAncestorStatement(this SyntaxToken token)
 		{
+			if (token.Kind() == SyntaxKind.None)
+			{
+				throw new ArgumentNullException(nameof(token));
+			}
 			var node = token.Parent;
 			while (node != null && !(node is StatementSyntax))
 			{
@@ -106,7 +130,7 @@ namespace PRI.Messaging.Patterns.Analyzer
 
 			newRoot = newRoot.RemoveNodes(toRemove, SyntaxRemoveOptions.KeepNoTrivia);
 
-			return newRoot as T;
+			return newRoot;
 		}
 
 		public static TextSpan GetSpanOfAssignmentDependenciesInSpan(this MemberDeclarationSyntax containingMethod,
@@ -139,6 +163,48 @@ namespace PRI.Messaging.Patterns.Analyzer
 			return resultSpan;
 		}
 
+		public static TextSpan GetSpanOfAssignmentDependenciesAndDeclarationsInSpan(this MemberDeclarationSyntax containingMethod,
+			TextSpan textSpan, SemanticModel model, CancellationToken cancellationToken = default(CancellationToken))
+		{
+			var resultSpan = textSpan;
+			List<SyntaxNode> dependentAssignments = new List<SyntaxNode>();
+			var tokenKeyComparer = Comparer<int>.Default;
+			do
+			{
+				SyntaxNode[] assignments = containingMethod.DescendantNodes(resultSpan)
+					.Where(e => (e is AssignmentExpressionSyntax || e is EqualsValueClauseSyntax) && !dependentAssignments.Contains(e)).ToArray();
+				if (!assignments.Any()) // no newly found assignments, done
+				{
+					break;
+				}
+				dependentAssignments.AddRange(assignments);
+				IEnumerable<ISymbol> symbolsAssigned = dependentAssignments.Select(e => GetAssignmentSymbol(e, model, cancellationToken));
+				SortedSet<SyntaxToken> references = new SortedSet<SyntaxToken>(Comparer<SyntaxToken>.Create((token, syntaxToken) => tokenKeyComparer.Compare(
+					token.SpanStart, syntaxToken.SpanStart)));
+
+				foreach (ISymbol symbol in symbolsAssigned)
+				{
+					var symbolReferences = GetSymbolReferences(containingMethod, symbol);
+					references.UnionWith(symbolReferences);
+				}
+				resultSpan = GetBoundingSpan(references);
+			} while (true);
+			return resultSpan;
+		}
+
+		public static string GetSpanText(this Location location)
+		{
+			if (location == null)
+			{
+				throw new ArgumentNullException(nameof(location));
+			}
+			if (location == Location.None || location.SourceTree == null || location.SourceSpan.IsEmpty)
+			{
+				throw new ArgumentException(nameof(location));
+			}
+			return location.SourceTree.ToString().Substring(location.SourceSpan.Start, location.SourceSpan.Length);
+		}
+
 		public static TextSpan GetBoundingSpan(this IEnumerable<SyntaxToken> symbolReferences)
 		{
 			var locations = symbolReferences
@@ -168,11 +234,25 @@ namespace PRI.Messaging.Patterns.Analyzer
 			}
 
 			var containingMethod = parentMethod as MemberDeclarationSyntax;
+			if(containingMethod == null)
+			{
+				throw new InvalidOperationException();
+			}
 			return containingMethod;
 		}
 
 		public static ISymbol GetAssignmentSymbol(this SyntaxNode parent, SemanticModel model, CancellationToken cancellationToken = default(CancellationToken))
 		{
+			var memberAccess = parent as MemberAccessExpressionSyntax;
+			if (memberAccess != null)
+			{
+				return parent.Parent.Parent.GetAssignmentSymbol(model, cancellationToken);
+			}
+			var awaitExpression = parent as AwaitExpressionSyntax;
+			if (awaitExpression != null)
+			{
+				return parent.Parent.GetAssignmentSymbol(model, cancellationToken);
+			}
 			var simpleAssignment = parent as AssignmentExpressionSyntax;
 
 			ISymbol symbol = null;
@@ -231,9 +311,10 @@ namespace PRI.Messaging.Patterns.Analyzer
 			});
 
 			var tryStatement = SyntaxFactory.TryStatement(
-				SyntaxFactory.Block(SyntaxFactory.List(tryBlockStatements)),
-				SyntaxFactory.List(catchClauses),
-				finallyClauseSyntax);
+					SyntaxFactory.Block(SyntaxFactory.List(tryBlockStatements)),
+					SyntaxFactory.List(catchClauses),
+					finallyClauseSyntax)
+				.WithAdditionalAnnotations(Formatter.Annotation);
 
 			var newMethod = containingMethod.ReplaceNodes(tryBlockStatements.ToImmutableList(), tryStatement);
 
@@ -253,15 +334,127 @@ namespace PRI.Messaging.Patterns.Analyzer
 			return compilationUnitSyntax;
 		}
 
-		public static bool IsRequestAsync(IMethodSymbol methodSymbolInfo)
+		public static TypeSyntax ToTypeSyntax(this INamedTypeSymbol namedTypeSymbol, SyntaxGenerator generator)
 		{
-			if (methodSymbolInfo.Arity == 0 || !methodSymbolInfo.IsGenericMethod) return false;
-			var matchingMethod = Helpers.GetRequestAsyncInvocationMethodInfo(methodSymbolInfo);
-			if (matchingMethod != null)
+			if(namedTypeSymbol.IsGenericType)
 			{
-				return true;
+				return SyntaxFactory.GenericName(namedTypeSymbol.Name)
+					.WithTypeArgumentList(
+						SyntaxFactory.TypeArgumentList(
+							SyntaxFactory.SeparatedList(
+								namedTypeSymbol.ConstructedFrom.TypeArguments
+									.Select(e => (TypeSyntax) generator.TypeExpression(e)))));
 			}
-			return false;
+			return SyntaxFactory.ParseTypeName(namedTypeSymbol.Name);
+		}
+
+		public static IEnumerable<TypeParameterConstraintSyntax> GetTypeParameterConstraints(
+			this ITypeParameterSymbol typeParameterSymbol, SyntaxGenerator generator)
+		{
+			foreach (var type in typeParameterSymbol.ConstraintTypes)
+				yield return SyntaxFactory.TypeConstraint((TypeSyntax) generator.TypeExpression(type));
+			if (typeParameterSymbol.HasConstructorConstraint)
+			{
+				yield return SyntaxFactory.ConstructorConstraint();
+			}
+			if (typeParameterSymbol.HasReferenceTypeConstraint)
+			{
+				yield return SyntaxFactory.ClassOrStructConstraint(SyntaxKind.ClassConstraint);
+			}
+			if (typeParameterSymbol.HasValueTypeConstraint)
+			{
+				yield return SyntaxFactory.ClassOrStructConstraint(SyntaxKind.StructConstraint);
+			}
+		}
+
+		/// <summary>
+		/// Create a new MethodDeclaration that returns Task or Task{T} and has async modifier.
+		/// </summary>
+		/// <param name="originalMethod"></param>
+		/// <param name="method"></param>
+		/// <param name="model"></param>
+		/// <returns></returns>
+		public static MethodDeclarationSyntax WithAsync(this MethodDeclarationSyntax originalMethod, MethodDeclarationSyntax method, SemanticModel model)
+		{
+			if (!originalMethod.ReturnType.ToDisplayString(model).StartsWith($"{typeof(Task)}", StringComparison.Ordinal))
+			{
+				var returnType = method.ReturnType.ToString();
+				method = method.
+					WithReturnType(SyntaxFactory.ParseTypeName(
+							returnType == "void" ? "Task" : $"Task<{returnType}>")
+						.WithTrailingTrivia(originalMethod.ReturnType.GetTrailingTrivia())
+					);
+			}
+			return method
+				.WithModifiers(method.Modifiers.Add(SyntaxFactory.Token(SyntaxKind.AsyncKeyword)))
+				.WithAdditionalAnnotations(Formatter.Annotation);
+		}
+
+		public static MethodDeclarationSyntax WithoutAsync(this MethodDeclarationSyntax method)
+		{
+			var genericName = method.ReturnType as GenericNameSyntax;
+			// if not generic type is either void or Task, in either case switch to void.
+			method = method.WithReturnType(genericName != null
+				? genericName.TypeArgumentList.Arguments[0]
+				: SyntaxFactory.PredefinedType(
+					SyntaxFactory.Token(SyntaxKind.VoidKeyword)));
+			return method.WithModifiers(
+				method.Modifiers.Remove(
+					method.Modifiers.Single(e => e.IsKind(SyntaxKind.AsyncKeyword))));
+		}
+
+		public static MethodDeclarationSyntax GetContainingMethodDeclaration(SyntaxNode invocation)
+		{
+			return invocation.Ancestors().OfType<MethodDeclarationSyntax>().FirstOrDefault();
+		}
+
+		public static INamespaceSymbol GetContainingNamespace(this MemberDeclarationSyntax member, SemanticModel model)
+		{
+			return model.GetDeclaredSymbol(member.Parent).ContainingNamespace;
+		}
+
+		public static INamespaceSymbol GetContainingNamespace(this TypeDeclarationSyntax type, SemanticModel model)
+		{
+			return model.GetDeclaredSymbol(type).ContainingNamespace;
+		}
+
+		public static string GetFullNamespaceName(this INamespaceSymbol @namespace)
+		{
+			return @namespace.ToString();
+		}
+
+		public static SyntaxToken GetIdentifier(this MemberDeclarationSyntax memberDeclarationSyntax)
+		{
+			var method = memberDeclarationSyntax as MethodDeclarationSyntax;
+			if (method != null) return method.Identifier;
+			//var @namespace = memberDeclarationSyntax as NamespaceDeclarationSyntax;
+			//if (@namespace != null) return @namespace.Identifier;
+			var @delegate = memberDeclarationSyntax as DelegateDeclarationSyntax;
+			if (@delegate != null) return @delegate.Identifier;
+			var type = memberDeclarationSyntax as TypeDeclarationSyntax;
+			if (type != null) return type.Identifier;
+			var constructor = memberDeclarationSyntax as ConstructorDeclarationSyntax;
+			if (constructor != null) return constructor.Identifier;
+			var enumMember = memberDeclarationSyntax as EnumMemberDeclarationSyntax;
+			if (enumMember != null) return enumMember.Identifier;
+			return default(SyntaxToken);
+		}
+
+		public static Document ReplaceNode(this Document document, SyntaxNode original, SyntaxNode replacement)
+		{
+			SyntaxNode root;
+			SemanticModel model;
+			return document.ReplaceNode(original, replacement, out root, out model);
+		}
+
+		public static Document ReplaceNode(this Document document, SyntaxNode original, SyntaxNode replacement, out SyntaxNode root, out SemanticModel model)
+		{
+			var currentRoot = document.GetSyntaxRootAsync().Result;
+			var newRoot = currentRoot.ReplaceNode(original, replacement);
+			var newDocument = document.WithSyntaxRoot(newRoot);
+			root = newDocument.GetSyntaxRootAsync().Result;
+			model = newDocument.GetSemanticModelAsync().Result;
+			return newDocument;
 		}
 	}
 }

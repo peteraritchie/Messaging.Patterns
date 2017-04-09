@@ -36,8 +36,10 @@
     <CodeAnalysisRuleSet>PRI.Messaging.Patterns.Analyzer.ruleset</CodeAnalysisRuleSet>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="CodeAnalysisUtilities.cs" />
     <Compile Include="CodeFixProvider.cs" />
     <Compile Include="DiagnosticAnalyzer.cs" />
+    <Compile Include="Utility\Utilities.cs" />
     <Compile Include="Utility\Facts.cs" />
     <Compile Include="Utility\EmptyCache.cs" />
     <Compile Include="CodeAnalysisExtensions.cs" />

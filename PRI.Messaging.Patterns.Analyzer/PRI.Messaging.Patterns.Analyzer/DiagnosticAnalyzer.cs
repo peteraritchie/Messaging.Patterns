@@ -8,6 +8,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
+using PRI.Messaging.Patterns.Analyzer.Utility;
 using PRI.Messaging.Patterns.Exceptions;
 using PRI.Messaging.Primitives;
 
@@ -53,7 +54,7 @@ namespace PRI.Messaging.Patterns.Analyzer
 			=> new LocalizableResourceString(name, Resources.ResourceManager, typeof(Resources));
 
 		private ITypeSymbol _iBusSymbol;
-		private static Type _type = typeof(IBus);
+		private static readonly Type _type = typeof(IBus);
 
 		public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics
 			=> ImmutableArray.Create(RuleMp0100, RuleMp0101, RuleMp0102, RuleMp0103);
@@ -62,22 +63,12 @@ namespace PRI.Messaging.Patterns.Analyzer
 		{
 			// TODO: Consider registering other actions that act on syntax instead of or in addition to symbols
 			// See https://github.com/dotnet/roslyn/blob/master/docs/analyzers/Analyzer%20Actions%20Semantics.md for more information
-			context.RegisterSyntaxNodeAction(AnalyzeLocalDeclaration, SyntaxKind.LocalDeclarationStatement);
 			context.RegisterSymbolAction(AnalyzeFieldPropertySymbol, SymbolKind.Field, SymbolKind.Property);
 
 			context.RegisterSyntaxNodeAction(AnalyzeMethodDeclaration, SyntaxKind.MethodDeclaration);
 			context.RegisterSyntaxNodeAction(AnalyzeFieldDeclaration, SyntaxKind.FieldDeclaration);
 			context.RegisterSyntaxNodeAction(AnalyzePropertyDeclaration, SyntaxKind.PropertyDeclaration);
 
-		}
-
-		private void AnalyzeLocalDeclaration(SyntaxNodeAnalysisContext obj)
-		{
-			var local = obj.Node as LocalDeclarationStatementSyntax;
-			Debug.Assert(local != null, "local != null");
-			var type = local.Declaration.Type;
-			var symbol = obj.SemanticModel.GetSymbolInfo(type).Symbol;
-			if (symbol == null) return;
 		}
 
 		private void AnalyzeMethodDeclaration(SyntaxNodeAnalysisContext analysisContext)
@@ -128,7 +119,7 @@ namespace PRI.Messaging.Patterns.Analyzer
 					return;
 				}
 
-				if (CodeAnalysisExtensions.IsRequestAsync(methodSymbolInfo))
+				if (Utilities.IsRequestAsync(methodSymbolInfo))
 				{
 					if (!(invocationSyntax.Parent is AwaitExpressionSyntax))
 					{
@@ -179,7 +170,10 @@ namespace PRI.Messaging.Patterns.Analyzer
 							var errorType = semanticModel.GetTypeInfo(firstRightCatch.Declaration.Type, cancellationToken).Type as INamedTypeSymbol;
 							if (errorType == null)
 							{
-								// TODO: diagnose?
+								var diagnostic = Diagnostic.Create(RuleMp0101,
+									methodExpression.GetLocation());
+
+								analysisContext.ReportDiagnostic(diagnostic);
 							}
 							else
 							{
@@ -190,8 +184,10 @@ namespace PRI.Messaging.Patterns.Analyzer
 								// event parameter in the RequestAsync invocation
 								if (!argumentErrorEventType.Equals(catchErrorEventType))
 								{
-									Debug.WriteLine("arguments are not right");
-									// TODO: diagnose
+									var diagnostic = Diagnostic.Create(RuleMp0101,
+										methodExpression.GetLocation());
+
+									analysisContext.ReportDiagnostic(diagnostic);
 								}
 								else
 								{
@@ -215,11 +211,6 @@ namespace PRI.Messaging.Patterns.Analyzer
 							}
 						}
 					}
-
-					// TODO: check to make sure there's an exception block catching ReceivedErrorEventException<TErrorEvent> or higher
-					// TODO: offer to break out the continuation into a success event handler the exception block into an error event handler
-					// hooking them up where other bus.AddHandlers are called and replace RequestAsync with Send
-					// with TODOs to verify storage of state and retrieval of state
 				}
 			}
 		}

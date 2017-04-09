@@ -1,4 +1,5 @@
-﻿using Microsoft.CodeAnalysis;
+﻿using System;
+using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CodeActions;
 using Microsoft.CodeAnalysis.CodeFixes;
 using Microsoft.CodeAnalysis.Diagnostics;
@@ -46,6 +47,16 @@ namespace TestHelper
 			VerifyFix(LanguageNames.CSharp, GetCSharpDiagnosticAnalyzer(), GetCSharpCodeFixProvider(), oldSource, newSource, codeFixIndex, allowNewCompilerDiagnostics);
 		}
 
+		protected void VerifyCSharpFix(string oldSource, string newSource, params KeyValuePair<string, string>[] filenameContentPairs)
+		{
+			VerifyFix(LanguageNames.CSharp, GetCSharpDiagnosticAnalyzer(), GetCSharpCodeFixProvider(), oldSource, newSource, null, false, filenameContentPairs);
+		}
+
+		protected void VerifyCSharpFix(string oldSource, string newSource, bool allowNewCompilerDiagnostics, params KeyValuePair<string, string>[] filenameContentPairs)
+		{
+			VerifyFix(LanguageNames.CSharp, GetCSharpDiagnosticAnalyzer(), GetCSharpCodeFixProvider(), oldSource, newSource, null, allowNewCompilerDiagnostics, filenameContentPairs);
+		}
+
 		/// <summary>
 		/// Called to test a VB codefix when applied on the inputted string as a source
 		/// </summary>
@@ -71,9 +82,10 @@ namespace TestHelper
 		/// <param name="newSource">A class in the form of a string after the CodeFix was applied to it</param>
 		/// <param name="codeFixIndex">Index determining which codefix to apply if there are multiple</param>
 		/// <param name="allowNewCompilerDiagnostics">A bool controlling whether or not the test will fail if the CodeFix introduces other warnings after being applied</param>
-		private void VerifyFix(string language, DiagnosticAnalyzer analyzer, CodeFixProvider codeFixProvider, string oldSource, string newSource, int? codeFixIndex, bool allowNewCompilerDiagnostics)
+		private void VerifyFix(string language, DiagnosticAnalyzer analyzer, CodeFixProvider codeFixProvider, string oldSource, string newSource, int? codeFixIndex, bool allowNewCompilerDiagnostics, params KeyValuePair<string, string>[] filenameContentPairs)
 		{
 			var document = CreateDocument(oldSource, language);
+			var documentName = document.Name;
 			var analyzerDiagnostics = GetSortedDiagnosticsFromDocuments(analyzer, new[] { document });
 			var compilerDiagnostics = GetCompilerDiagnostics(document);
 			var attempts = analyzerDiagnostics.Length;
@@ -96,23 +108,28 @@ namespace TestHelper
 				}
 
 				document = ApplyFix(document, actions.ElementAt(0));
-				analyzerDiagnostics = GetSortedDiagnosticsFromDocuments(analyzer, new[] { document });
-
-				var newCompilerDiagnostics = GetNewDiagnostics(compilerDiagnostics, GetCompilerDiagnostics(document));
-
-				//check if applying the code fix introduced any new compiler diagnostics
-				if (!allowNewCompilerDiagnostics && newCompilerDiagnostics.Any())
+				foreach (var d in document.Project.Documents)
 				{
-					// Format and get the compiler diagnostics again so that the locations make sense in the output
-					document = document.WithSyntaxRoot(Formatter.Format(document.GetSyntaxRootAsync().Result, Formatter.Annotation, document.Project.Solution.Workspace));
-					newCompilerDiagnostics = GetNewDiagnostics(compilerDiagnostics, GetCompilerDiagnostics(document));
+					var doc = d;
+					analyzerDiagnostics = GetSortedDiagnosticsFromDocuments(analyzer, new[] {doc});
 
-					Assert.IsTrue(false,
-						string.Format("Fix introduced new compiler diagnostics:\r\n{0}\r\n\r\nNew document:\r\n{1}\r\n",
-							string.Join("\r\n", newCompilerDiagnostics.Select(d => d.ToString())),
-							document.GetSyntaxRootAsync().Result.ToFullString()));
+					var newCompilerDiagnostics = GetNewDiagnostics(compilerDiagnostics, GetCompilerDiagnostics(doc));
+
+					//check if applying the code fix introduced any new compiler diagnostics
+					if (!allowNewCompilerDiagnostics && newCompilerDiagnostics.Any())
+					{
+						// Format and get the compiler diagnostics again so that the locations make sense in the output
+						doc =
+							doc.WithSyntaxRoot(Formatter.Format(doc.GetSyntaxRootAsync().Result, Formatter.Annotation,
+								doc.Project.Solution.Workspace));
+						newCompilerDiagnostics = GetNewDiagnostics(compilerDiagnostics, GetCompilerDiagnostics(doc));
+
+						Assert.IsTrue(false,
+							string.Format("Fix introduced new compiler diagnostics:\r\n{0}\r\n\r\nNew document:\r\n{1}\r\n",
+								string.Join("\r\n", newCompilerDiagnostics.Select(e => e.ToString())),
+								doc.GetSyntaxRootAsync().Result.ToFullString()));
+					}
 				}
-
 				//check if there are analyzer diagnostics left after the code fix
 				if (!analyzerDiagnostics.Any())
 				{
@@ -121,8 +138,15 @@ namespace TestHelper
 			}
 
 			//after applying all of the code fixes, compare the resulting string to the inputted one
-			var actual = GetStringFromDocument(document);
-			Assert.AreEqual(newSource, actual);
+			foreach (var filenameContentPair in new [] { new KeyValuePair<string,string>(documentName, newSource)}.Concat(filenameContentPairs))
+			{
+				var otherDocument =
+					document.Project.Documents.SingleOrDefault(
+						e => filenameContentPair.Key.Equals(e.Name, StringComparison.OrdinalIgnoreCase));
+				Assert.IsNotNull(otherDocument, $"{filenameContentPair.Key} does not exist in the project.");
+				var actual = GetStringFromDocument(otherDocument);
+				Assert.AreEqual(filenameContentPair.Value, actual);
+			}
 		}
 	}
 }

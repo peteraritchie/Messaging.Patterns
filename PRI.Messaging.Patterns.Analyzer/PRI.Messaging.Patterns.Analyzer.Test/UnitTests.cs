@@ -759,7 +759,7 @@ namespace PRI { namespace Test
     {
         public async Task<bool> RecommendAsyncDiagnosis()
         {
-            var bus = new Bus();
+            IBus bus = new Bus();
             var command = new Command
             {
                 CorrelationId = Guid.NewGuid().ToString(""D"")
@@ -840,7 +840,7 @@ namespace PRI { namespace Test
     {
             public bool RecommendAsyncDiagnosis()
             {
-                var bus = new Bus();
+                IBus bus = new Bus();
                 var command = new Command
                 {
                     CorrelationId = Guid.NewGuid().ToString(""D"")

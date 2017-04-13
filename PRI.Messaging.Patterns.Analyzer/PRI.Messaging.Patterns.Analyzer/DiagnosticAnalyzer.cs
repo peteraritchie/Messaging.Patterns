@@ -79,96 +79,89 @@ namespace PRI.Messaging.Patterns.Analyzer
 		private void AnalyzeMethodDeclaration(SyntaxNodeAnalysisContext analysisContext,
 			CancellationToken cancellationToken)
 		{
-			var methodDeclarationSyntax = analysisContext.Node as MethodDeclarationSyntax;
-			Debug.Assert(methodDeclarationSyntax != null, "methodDeclarationSyntax != null");
-			foreach (
-				var invocationSyntax in methodDeclarationSyntax.DescendantNodes(_ => true).OfType<InvocationExpressionSyntax>())
+			try
 			{
-				var invocationSyntaxExpression = invocationSyntax.Expression as MemberAccessExpressionSyntax;
-				if (invocationSyntaxExpression == null)
+				var methodDeclarationSyntax = analysisContext.Node as MethodDeclarationSyntax;
+				Debug.Assert(methodDeclarationSyntax != null, "methodDeclarationSyntax != null");
+				foreach (
+					var invocationSyntax in methodDeclarationSyntax.DescendantNodes(_ => true).OfType<InvocationExpressionSyntax>())
 				{
-					continue;
-				}
-				var descendantExpressionNodes = invocationSyntaxExpression.DescendantNodes().ToArray();
-				// assumes identifier in use is the first element (IBus), and the method invoked on it
-				// is the second
-				if (descendantExpressionNodes.Length < 2)
-				{
-					continue;
-				}
-				var invokedIdentifierName = descendantExpressionNodes.ElementAt(0) as IdentifierNameSyntax;
-				if (invokedIdentifierName == null)
-				{
-					continue;
-				}
-				var semanticModel = analysisContext.SemanticModel;
-				var invokedIdentifierTypeInfo = semanticModel.GetTypeInfo(invokedIdentifierName, cancellationToken).Type;
-				if (invokedIdentifierTypeInfo == null || invokedIdentifierTypeInfo.TypeKind == TypeKind.Error)
-				{
-					continue;
-				}
-				if (!ImplementsIBus(invokedIdentifierTypeInfo))
-				{
-					continue;
-				}
-
-				var methodExpression = descendantExpressionNodes.ElementAt(1);
-				var methodSymbolInfo = semanticModel.GetSymbolInfo(methodExpression, cancellationToken).Symbol as IMethodSymbol;
-				if (methodSymbolInfo == null)
-				{
-					return;
-				}
-
-				if (Utilities.IsRequestAsync(methodSymbolInfo))
-				{
-					if (!(invocationSyntax.Parent is AwaitExpressionSyntax))
+					var invocationSyntaxExpression = invocationSyntax.Expression as MemberAccessExpressionSyntax;
+					if (invocationSyntaxExpression == null)
 					{
-						var diagnostic = Diagnostic.Create(RuleMp0100,
-							methodExpression.GetLocation());
-
-						analysisContext.ReportDiagnostic(diagnostic);
+						continue;
 					}
-					var parent = invocationSyntax.Parent;
-					TryStatementSyntax parentTryStatement = null;
-					while (!(parent is MethodDeclarationSyntax))
+					var descendantExpressionNodes = invocationSyntaxExpression.DescendantNodes().ToArray();
+					// assumes identifier in use is the first element (IBus), and the method invoked on it
+					// is the second
+					if (descendantExpressionNodes.Length < 2)
 					{
-						if (parent is BlockSyntax)
+						continue;
+					}
+					var invokedIdentifierName = descendantExpressionNodes.ElementAt(0) as IdentifierNameSyntax;
+					if (invokedIdentifierName == null)
+					{
+						continue;
+					}
+					var semanticModel = analysisContext.SemanticModel;
+					var invokedIdentifierTypeInfo = semanticModel.GetTypeInfo(invokedIdentifierName, cancellationToken).Type;
+					if (invokedIdentifierTypeInfo == null || invokedIdentifierTypeInfo.TypeKind == TypeKind.Error)
+					{
+						continue;
+					}
+					if (!ImplementsIBus(invokedIdentifierTypeInfo))
+					{
+						continue;
+					}
+
+					var methodExpression = descendantExpressionNodes.ElementAt(1);
+					var methodSymbolInfo = semanticModel.GetSymbolInfo(methodExpression, cancellationToken).Symbol as IMethodSymbol;
+					if (methodSymbolInfo == null)
+					{
+						return;
+					}
+
+					if (Utilities.IsRequestAsync(methodSymbolInfo))
+					{
+						if (!(invocationSyntax.Parent is AwaitExpressionSyntax))
 						{
-							parentTryStatement = parent.Parent as TryStatementSyntax;
-							if (parentTryStatement != null)
+							var diagnostic = Diagnostic.Create(RuleMp0100,
+								methodExpression.GetLocation());
+
+							analysisContext.ReportDiagnostic(diagnostic);
+						}
+						var parent = invocationSyntax.Parent;
+						TryStatementSyntax parentTryStatement = null;
+						while (!(parent is MethodDeclarationSyntax))
+						{
+							if (parent is BlockSyntax)
 							{
-								break;
+								parentTryStatement = parent.Parent as TryStatementSyntax;
+								if (parentTryStatement != null)
+								{
+									break;
+								}
 							}
+							parent = parent.Parent;
 						}
-						parent = parent.Parent;
-					}
-					var genericNameSyntax = (GenericNameSyntax) invocationSyntaxExpression.Name; //.TypeArgumentList
-					if (parentTryStatement == null)
-					{
-						if (genericNameSyntax.TypeArgumentList.Arguments.Count > 2)
+						var genericNameSyntax = (GenericNameSyntax) invocationSyntaxExpression.Name; //.TypeArgumentList
+						if (parentTryStatement == null)
 						{
-							var diagnostic = Diagnostic.Create(RuleMp0101,
-								methodExpression.GetLocation());
+							if (genericNameSyntax.TypeArgumentList.Arguments.Count > 2)
+							{
+								var diagnostic = Diagnostic.Create(RuleMp0101,
+									methodExpression.GetLocation());
 
-							analysisContext.ReportDiagnostic(diagnostic);
-						}
-					}
-					else
-					{
-						// get catch type
-						var exceptionType = typeof(ReceivedErrorEventException<>);
-						var firstRightCatch = parentTryStatement.GetFirstCatchClauseByType(semanticModel, exceptionType, cancellationToken);
-						if (firstRightCatch == null)
-						{
-							var diagnostic = Diagnostic.Create(RuleMp0101,
-								methodExpression.GetLocation());
-
-							analysisContext.ReportDiagnostic(diagnostic);
+								analysisContext.ReportDiagnostic(diagnostic);
+							}
 						}
 						else
 						{
-							var errorType = semanticModel.GetTypeInfo(firstRightCatch.Declaration.Type, cancellationToken).Type as INamedTypeSymbol;
-							if (errorType == null)
+							// get catch type
+							var exceptionType = typeof(ReceivedErrorEventException<>);
+							var firstRightCatch = parentTryStatement.GetFirstCatchClauseByType(semanticModel, exceptionType,
+								cancellationToken);
+							if (firstRightCatch == null)
 							{
 								var diagnostic = Diagnostic.Create(RuleMp0101,
 									methodExpression.GetLocation());
@@ -177,12 +170,9 @@ namespace PRI.Messaging.Patterns.Analyzer
 							}
 							else
 							{
-								var catchErrorEventType = errorType.TypeArguments[0];
-								var argumentErrorEventType =
-									semanticModel.GetTypeInfo(genericNameSyntax.TypeArgumentList.Arguments[2], cancellationToken).Type;
-								// check that the type parameter to the error type is the same as the error
-								// event parameter in the RequestAsync invocation
-								if (!argumentErrorEventType.Equals(catchErrorEventType))
+								var errorType =
+									semanticModel.GetTypeInfo(firstRightCatch.Declaration.Type, cancellationToken).Type as INamedTypeSymbol;
+								if (errorType == null)
 								{
 									var diagnostic = Diagnostic.Create(RuleMp0101,
 										methodExpression.GetLocation());
@@ -191,27 +181,46 @@ namespace PRI.Messaging.Patterns.Analyzer
 								}
 								else
 								{
-									var messageType =
-										semanticModel.GetTypeInfo(genericNameSyntax.TypeArgumentList.Arguments[0], cancellationToken).Type;
-									if (ImplementsInterface<IEvent>(messageType))
+									var catchErrorEventType = errorType.TypeArguments[0];
+									var argumentErrorEventType =
+										semanticModel.GetTypeInfo(genericNameSyntax.TypeArgumentList.Arguments[2], cancellationToken).Type;
+									// check that the type parameter to the error type is the same as the error
+									// event parameter in the RequestAsync invocation
+									if (!argumentErrorEventType.Equals(catchErrorEventType))
 									{
-										var diagnostic = Diagnostic.Create(RuleMp0103,
+										var diagnostic = Diagnostic.Create(RuleMp0101,
 											methodExpression.GetLocation());
 
 										analysisContext.ReportDiagnostic(diagnostic);
 									}
 									else
 									{
-										var diagnostic = Diagnostic.Create(RuleMp0102,
-											methodExpression.GetLocation());
+										var messageType =
+											semanticModel.GetTypeInfo(genericNameSyntax.TypeArgumentList.Arguments[0], cancellationToken).Type;
+										if (ImplementsInterface<IEvent>(messageType))
+										{
+											var diagnostic = Diagnostic.Create(RuleMp0103,
+												methodExpression.GetLocation());
 
-										analysisContext.ReportDiagnostic(diagnostic);
+											analysisContext.ReportDiagnostic(diagnostic);
+										}
+										else
+										{
+											var diagnostic = Diagnostic.Create(RuleMp0102,
+												methodExpression.GetLocation());
+
+											analysisContext.ReportDiagnostic(diagnostic);
+										}
 									}
 								}
 							}
 						}
 					}
 				}
+			}
+			catch (Exception ex)
+			{
+				Debug.WriteLine(ex);
 			}
 		}
 
@@ -236,10 +245,13 @@ namespace PRI.Messaging.Patterns.Analyzer
 			var type = _type;
 			if (_iBusSymbol != null)
 			{
-				return invokedIdentifierTypeInfo.Interfaces.Contains(_iBusSymbol);
+				return invokedIdentifierTypeInfo.Interfaces.Contains(_iBusSymbol)
+					|| Equals(_iBusSymbol, invokedIdentifierTypeInfo);
 			}
-			var iBusCandidateSymbol = invokedIdentifierTypeInfo.Interfaces
-				.SingleOrDefault(e => e.ToString() == type.FullName);
+			var iBusCandidateSymbol = invokedIdentifierTypeInfo.ToString() == type.FullName
+				? invokedIdentifierTypeInfo
+				: invokedIdentifierTypeInfo.Interfaces
+					.SingleOrDefault(e => e.ToString() == type.FullName);
 			if (iBusCandidateSymbol == null)
 			{
 				return false;

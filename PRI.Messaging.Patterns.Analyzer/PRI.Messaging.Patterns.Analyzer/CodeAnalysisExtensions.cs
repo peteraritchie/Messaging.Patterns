@@ -243,35 +243,83 @@ namespace PRI.Messaging.Patterns.Analyzer
 
 		public static ISymbol GetAssignmentSymbol(this SyntaxNode parent, SemanticModel model, CancellationToken cancellationToken = default(CancellationToken))
 		{
-			var memberAccess = parent as MemberAccessExpressionSyntax;
-			if (memberAccess != null)
+			while (true)
 			{
-				return parent.Parent.Parent.GetAssignmentSymbol(model, cancellationToken);
-			}
-			var awaitExpression = parent as AwaitExpressionSyntax;
-			if (awaitExpression != null)
-			{
-				return parent.Parent.GetAssignmentSymbol(model, cancellationToken);
-			}
-			var simpleAssignment = parent as AssignmentExpressionSyntax;
-
-			ISymbol symbol = null;
-
-			if (simpleAssignment != null)
-			{
-				ExpressionSyntax variable = simpleAssignment.Left;
-				symbol = model.GetSymbolInfo(variable, cancellationToken).Symbol;
-			}
-			else
-			{
-				var equals = parent as EqualsValueClauseSyntax;
-				var variableDeclarator = @equals?.Parent as VariableDeclaratorSyntax;
-				if (variableDeclarator != null)
+				var localDeclaration = parent as LocalDeclarationStatementSyntax;
+				if (localDeclaration != null)
 				{
-					symbol = model.GetDeclaredSymbol(variableDeclarator, cancellationToken);
+					parent = localDeclaration.Declaration.Variables.First().Initializer;
+					continue;
+				}
+				var memberAccess = parent as MemberAccessExpressionSyntax;
+				if (memberAccess != null)
+				{
+					parent = parent.Parent.Parent;
+					continue;
+				}
+				var awaitExpression = parent as AwaitExpressionSyntax;
+				if (awaitExpression != null)
+				{
+					parent = parent.Parent;
+					continue;
+				}
+				var simpleAssignment = parent as AssignmentExpressionSyntax;
+
+				ISymbol symbol = null;
+
+				if (simpleAssignment != null)
+				{
+					ExpressionSyntax variable = simpleAssignment.Left;
+					symbol = model.GetSymbolInfo(variable, cancellationToken).Symbol;
+				}
+				else
+				{
+					var equals = parent as EqualsValueClauseSyntax;
+					var variableDeclarator = @equals?.Parent as VariableDeclaratorSyntax;
+					if (variableDeclarator != null)
+					{
+						symbol = model.GetDeclaredSymbol(variableDeclarator, cancellationToken);
+					}
+				}
+				return symbol;
+			}
+		}
+
+		public static SyntaxToken GetAssignmentToken(this SyntaxNode parent, SemanticModel model, CancellationToken cancellationToken = default(CancellationToken))
+		{
+			while (true)
+			{
+				var localDeclaration = parent as LocalDeclarationStatementSyntax;
+				if (localDeclaration != null)
+				{
+					return localDeclaration.Declaration.Variables.First().Identifier;
+				}
+				var memberAccess = parent as MemberAccessExpressionSyntax;
+				if (memberAccess != null)
+				{
+					parent = parent.Parent.Parent;
+					continue;
+				}
+				var awaitExpression = parent as AwaitExpressionSyntax;
+				if (awaitExpression != null)
+				{
+					parent = parent.Parent;
+					continue;
+				}
+				var simpleAssignment = parent as AssignmentExpressionSyntax;
+
+				if (simpleAssignment != null)
+				{
+					var xxx = simpleAssignment.Left;
+					throw new NotImplementedException();
+				}
+				else
+				{
+					var equals = parent as EqualsValueClauseSyntax;
+					var variableDeclarator = @equals?.Parent as VariableDeclaratorSyntax;
+					return variableDeclarator.Identifier;
 				}
 			}
-			return symbol;
 		}
 
 		public static SyntaxNode TryCatchSafe(this SyntaxNode subjectStatement, Dictionary<string, TypeSyntax> exceptionArgumentsInfo,

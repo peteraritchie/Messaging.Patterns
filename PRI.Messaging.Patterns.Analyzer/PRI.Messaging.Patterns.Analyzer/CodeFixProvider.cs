@@ -12,6 +12,7 @@ using Microsoft.CodeAnalysis.CodeActions;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Editing;
+using Microsoft.CodeAnalysis.FindSymbols;
 using Microsoft.CodeAnalysis.Formatting;
 using Microsoft.CodeAnalysis.Simplification;
 using Microsoft.CodeAnalysis.Text;
@@ -60,6 +61,10 @@ namespace PRI.Messaging.Patterns.Analyzer
 			var model = await document.GetSemanticModelAsync(cancellationToken);
 			var generator = SyntaxGenerator.GetGenerator(document);
 
+			// TODO: go looking for a reference to c'tor of a IBus type.
+			//SymbolFinder.FindImplementationsAsync()
+				// find c'tors
+				// find all references to one of those c'tors
 			MemberAccessExpressionSyntax requestAsyncMemberAccess;
 			SyntaxNode requestAsyncInvocationStatement;
 			StatementSyntax[] requestAsyncAndDependantStatements;
@@ -224,7 +229,8 @@ namespace PRI.Messaging.Patterns.Analyzer
 									SyntaxFactory.MemberAccessExpression(
 										SyntaxKind.SimpleMemberAccessExpression,
 										requestAsyncMemberAccess.Expression, // "bus"
-										SyntaxFactory.IdentifierName(nameof(BusExtensions.Send))))
+										SyntaxFactory.IdentifierName(nameof(BusExtensions.Send))
+											.WithAdditionalAnnotations(subjectNodeAnnotation)))
 								.WithArgumentList(((InvocationExpressionSyntax) requestAsyncMemberAccess.Parent).ArgumentList))
 						.WithLeadingTrivia(
 							SyntaxFactory.Comment("// TODO: store information about the message with CorrelationId for loading in handlers"),
@@ -272,9 +278,93 @@ namespace PRI.Messaging.Patterns.Analyzer
 					cancellationToken: cancellationToken);
 				Debug.WriteLine("after import, after reduce, after format");
 				Debug.WriteLine((await errorEventHandlerDocument.GetSyntaxRootAsync(cancellationToken)).ToString());
-				return errorEventHandlerDocument.Project.Solution.WithDocumentText(errorEventHandlerDocument.Id,
+				solution = errorEventHandlerDocument.Project.Solution.WithDocumentText(errorEventHandlerDocument.Id,
 					await errorEventHandlerDocument.GetTextAsync(cancellationToken));
 			}
+			{
+				document = solution.GetDocument(document.Id);
+				model = await document.GetSemanticModelAsync(cancellationToken);
+				root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
+				// TODO: go looking for a reference to c'tor of a IBus type.
+				var busSend = root.GetAnnotatedNodes(subjectNodeAnnotation).Single();
+				requestAsyncMemberAccess =
+					busSend.Parent.AncestorsAndSelf().OfType<MemberAccessExpressionSyntax>().First();
+				var busSymbol = model.GetTypeInfo(requestAsyncMemberAccess.Expression).Type as INamedTypeSymbol;
+				if (busSymbol.TypeKind == TypeKind.Interface)
+				{
+					var busImplementations = await SymbolFinder.FindImplementationsAsync(busSymbol, solution,
+						cancellationToken: cancellationToken);
+					foreach (INamedTypeSymbol impl in busImplementations.OfType<INamedTypeSymbol>())
+					{
+						var ctorSymbol = impl.Constructors.SingleOrDefault(e => !e.IsStatic && e.Parameters.Length == 0);
+						// only implementations with public constructors
+						if (ctorSymbol != null)
+						{
+							var handlerSymbol = impl.GetMembers(nameof(IBus.AddHandler)).Single();
+							var references = await SymbolFinder.FindReferencesAsync(handlerSymbol, solution, cancellationToken);
+							if (references.Any(e => e.Locations.Any()))
+							{
+								var definition = references
+									.GroupBy(e => e.Definition)
+									.OrderByDescending(g => g.Count())
+									.First();
+							}
+							else
+							{
+								// no add handlers at the moment, let's just find where it was constructed.
+								var locations =
+									(await SymbolFinder.FindReferencesAsync(ctorSymbol, solution, cancellationToken))
+									.SelectMany(e => e.Locations);
+								if (locations.Count() == 1)
+								{
+									var referencedLocation = locations.First();
+									var referencedRoot = await referencedLocation.Document.GetSyntaxRootAsync(cancellationToken);
+									var node = referencedRoot.FindNode(referencedLocation.Location.SourceSpan);
+									var statement = node.GetAncestorStatement();
+									var busNode = statement.GetAssignmentToken(model).WithLeadingTrivia().WithTrailingTrivia();
+									// add after this statement
+									generator = SyntaxGenerator.GetGenerator(document);
+									referencedRoot = referencedRoot.InsertNodesAfter(statement, new[]
+									{
+										SyntaxFactory.ExpressionStatement(
+											(ExpressionSyntax) generator.InvocationExpression(
+												generator.MemberAccessExpression(
+													SyntaxFactory.IdentifierName(busNode),
+													nameof(IBus.AddHandler)),
+												generator.ObjectCreationExpression(
+													SyntaxFactory.IdentifierName(
+														errorEventHandlerDeclaration.Identifier))
+											)
+										)
+									});
+									var newDocument = referencedLocation.Document.WithSyntaxRoot(referencedRoot);
+									solution = newDocument.Project.Solution;
+								}
+								else
+								{
+									if (locations.Any())
+									{
+									}
+								}
+							}
+						}
+					}
+				}
+				else
+				{
+					var busDeclaration = busSymbol.DeclaringSyntaxReferences.First();
+				}
+				//var t = busSymbol.Interfaces.FirstOrDefault(e => e.Name == typeof(IBus).Name);
+				//if (t != null)
+				//{
+				//	busSymbol = t;
+				//}
+				//var references = await SymbolFinder.FindReferencesAsync(busSymbol, solution, cancellationToken); 
+
+				// find c'tors
+				// find all references to one of those c'tors
+			}
+			return solution;
 		}
 
 		private static SyntaxToken GenerateUniqueParameterIdentifierForScope(ISymbol namedTypeSymbol, SemanticModel model, SyntaxNode block)

@@ -4,6 +4,7 @@ using System.Linq;
 using NUnit.Framework;
 using PRI.Messaging.Patterns;
 using PRI.Messaging.Patterns.Extensions.Bus;
+using PRI.Messaging.Patterns.Extensions.Consumer;
 using PRI.Messaging.Primitives;
 
 namespace Tests
@@ -58,6 +59,44 @@ namespace Tests
 			}
 
 			public string CorrelationId { get; set; }
+		}
+
+		public class MessageHandler : IConsumer<MyMessage>
+		{
+			public IMessage LastMessageReceived;
+			public void Handle(MyMessage message)
+			{
+				LastMessageReceived = message;
+			}
+		}
+
+		public class EventHandler : IConsumer<MyEvent>
+		{
+			public IMessage LastMessageReceived;
+			public void Handle(MyEvent message)
+			{
+				LastMessageReceived = message;
+			}
+		}
+
+		[Test]
+		public void ConsumerPublishSucceeds()
+		{
+			IConsumer<MyEvent> consumer = new EventHandler();
+
+			var myEvent = new MyEvent();
+			consumer.Publish(myEvent);
+			Assert.AreEqual(myEvent.CorrelationId, ((EventHandler)consumer).LastMessageReceived.CorrelationId);
+		}
+
+		[Test]
+		public void ConsumerSendSucceeds()
+		{
+			IConsumer<MyMessage> consumer = new MessageHandler();
+
+			var myEvent = new MyMessage();
+			consumer.Send(myEvent);
+			Assert.AreEqual(myEvent.CorrelationId, ((MessageHandler)consumer).LastMessageReceived.CorrelationId);
 		}
 
 		[Test]

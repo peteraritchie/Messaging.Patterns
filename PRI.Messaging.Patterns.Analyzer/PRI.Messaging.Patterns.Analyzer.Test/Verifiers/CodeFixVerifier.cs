@@ -42,19 +42,20 @@ namespace TestHelper
 		/// <param name="newSource">A class in the form of a string after the CodeFix was applied to it</param>
 		/// <param name="codeFixIndex">Index determining which codefix to apply if there are multiple</param>
 		/// <param name="allowNewCompilerDiagnostics">A bool controlling whether or not the test will fail if the CodeFix introduces other warnings after being applied</param>
-		protected void VerifyCSharpFix(string oldSource, string newSource, int? codeFixIndex = null, bool allowNewCompilerDiagnostics = false)
+		/// <param name="fixedDocumentsText"></param>
+		protected void VerifyCSharpFix(string oldSource, string newSource, int? codeFixIndex = null, bool allowNewCompilerDiagnostics = false, List<string> fixedDocumentsText = null)
 		{
-			VerifyFix(LanguageNames.CSharp, GetCSharpDiagnosticAnalyzer(), GetCSharpCodeFixProvider(), oldSource, newSource, codeFixIndex, allowNewCompilerDiagnostics);
+			VerifyFix(LanguageNames.CSharp, GetCSharpDiagnosticAnalyzer(), GetCSharpCodeFixProvider(), oldSource, newSource, codeFixIndex, allowNewCompilerDiagnostics, fixedDocumentsText);
 		}
 
 		protected void VerifyCSharpFix(string oldSource, string newSource, params KeyValuePair<string, string>[] filenameContentPairs)
 		{
-			VerifyFix(LanguageNames.CSharp, GetCSharpDiagnosticAnalyzer(), GetCSharpCodeFixProvider(), oldSource, newSource, null, false, filenameContentPairs);
+			VerifyFix(LanguageNames.CSharp, GetCSharpDiagnosticAnalyzer(), GetCSharpCodeFixProvider(), oldSource, newSource, null, false, null, filenameContentPairs);
 		}
 
 		protected void VerifyCSharpFix(string oldSource, string newSource, bool allowNewCompilerDiagnostics, params KeyValuePair<string, string>[] filenameContentPairs)
 		{
-			VerifyFix(LanguageNames.CSharp, GetCSharpDiagnosticAnalyzer(), GetCSharpCodeFixProvider(), oldSource, newSource, null, allowNewCompilerDiagnostics, filenameContentPairs);
+			VerifyFix(LanguageNames.CSharp, GetCSharpDiagnosticAnalyzer(), GetCSharpCodeFixProvider(), oldSource, newSource, null, allowNewCompilerDiagnostics, null, filenameContentPairs);
 		}
 
 		/// <summary>
@@ -66,7 +67,7 @@ namespace TestHelper
 		/// <param name="allowNewCompilerDiagnostics">A bool controlling whether or not the test will fail if the CodeFix introduces other warnings after being applied</param>
 		protected void VerifyBasicFix(string oldSource, string newSource, int? codeFixIndex = null, bool allowNewCompilerDiagnostics = false)
 		{
-			VerifyFix(LanguageNames.VisualBasic, GetBasicDiagnosticAnalyzer(), GetBasicCodeFixProvider(), oldSource, newSource, codeFixIndex, allowNewCompilerDiagnostics);
+			VerifyFix(LanguageNames.VisualBasic, GetBasicDiagnosticAnalyzer(), GetBasicCodeFixProvider(), oldSource, newSource, codeFixIndex, allowNewCompilerDiagnostics, null);
 		}
 
 		/// <summary>
@@ -82,7 +83,9 @@ namespace TestHelper
 		/// <param name="newSource">A class in the form of a string after the CodeFix was applied to it</param>
 		/// <param name="codeFixIndex">Index determining which codefix to apply if there are multiple</param>
 		/// <param name="allowNewCompilerDiagnostics">A bool controlling whether or not the test will fail if the CodeFix introduces other warnings after being applied</param>
-		private void VerifyFix(string language, DiagnosticAnalyzer analyzer, CodeFixProvider codeFixProvider, string oldSource, string newSource, int? codeFixIndex, bool allowNewCompilerDiagnostics, params KeyValuePair<string, string>[] filenameContentPairs)
+		/// <param name="fixedDocumentsText"></param>
+		/// <param name="filenameContentPairs"></param>
+		private void VerifyFix(string language, DiagnosticAnalyzer analyzer, CodeFixProvider codeFixProvider, string oldSource, string newSource, int? codeFixIndex, bool allowNewCompilerDiagnostics, List<string> fixedDocumentsText, params KeyValuePair<string, string>[] filenameContentPairs)
 		{
 			var document = CreateDocument(oldSource, language);
 			var documentName = document.Name;
@@ -145,6 +148,7 @@ namespace TestHelper
 						e => filenameContentPair.Key.Equals(e.Name, StringComparison.OrdinalIgnoreCase));
 				Assert.IsNotNull(otherDocument, $"{filenameContentPair.Key} does not exist in the project.");
 				var actual = GetStringFromDocument(otherDocument);
+				fixedDocumentsText?.Add(actual);
 				Assert.AreEqual(filenameContentPair.Value, actual);
 			}
 		}

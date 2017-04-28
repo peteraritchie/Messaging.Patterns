@@ -2,16 +2,15 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel.Composition;
 using System.ComponentModel.Composition.Hosting;
+using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
 using Microsoft.Mef.CommonServiceLocator;
 using Microsoft.Practices.ServiceLocation;
 using NUnit.Framework;
-using NUnit.Framework.Compatibility;
 using PRI.ProductivityExtensions.TemporalExtensions;
 using PRI.Messaging.Patterns;
 using PRI.Messaging.Patterns.Extensions.Bus;
-using PRI.Messaging.Primitives;
 using Tests.Mocks;
 
 namespace Tests
@@ -90,6 +89,7 @@ namespace Tests
 		public void NullBusThrowsWhenSettingServiceLocator()
 		{
 			Bus bus = null;
+			// ReSharper disable once ExpressionIsAlwaysNull
 			Assert.Throws<ArgumentNullException>(()=>bus.SetServiceLocator(null));
 		}
 
@@ -178,9 +178,11 @@ namespace Tests
 			var directory = Path.GetDirectoryName(new Uri(GetType().Assembly.CodeBase).LocalPath);
 			bus.AddHandlersAndTranslators(directory, "Tests*.dll", GetType().Namespace);
 
+			// ReSharper disable AssignNullToNotNullAttribute
 			Assert.IsTrue(bus._consumerInvokers.ContainsKey(typeof(Message3).AssemblyQualifiedName));
 			Assert.IsTrue(bus._consumerInvokers.ContainsKey(typeof(Message2).AssemblyQualifiedName));
 			Assert.IsTrue(bus._consumerInvokers.ContainsKey(typeof(Message1).AssemblyQualifiedName));
+			// ReSharper restore AssignNullToNotNullAttribute
 		}
 
 		[Test]

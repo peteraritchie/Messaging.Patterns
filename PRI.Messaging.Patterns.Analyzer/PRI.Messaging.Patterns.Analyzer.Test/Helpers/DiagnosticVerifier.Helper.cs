@@ -8,8 +8,8 @@ using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
 using PRI.Messaging.Patterns;
+using PRI.Messaging.Patterns.Analyzer.Test;
 using PRI.Messaging.Primitives;
-using Test;
 
 namespace TestHelper
 {
@@ -25,7 +25,7 @@ namespace TestHelper
 		private static readonly MetadataReference CodeAnalysisReference = MetadataReference.CreateFromFile(typeof(Compilation).Assembly.Location);
 		private static readonly MetadataReference Messaging_PatternsReference = MetadataReference.CreateFromFile(typeof(Bus).Assembly.Location);
 		private static readonly MetadataReference Messaging_PrimitivesReference = MetadataReference.CreateFromFile(typeof(IBus).Assembly.Location);
-		private static readonly MetadataReference MyClassLibraryReference = MetadataReference.CreateFromFile(typeof(Command).Assembly.Location);
+		private static readonly MetadataReference MyClassLibraryReference = MetadataReference.CreateFromFile(typeof(UnitTest).Assembly.Location);
 		private static readonly MetadataReference DebugReference = MetadataReference.CreateFromFile(
 			Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
 				@"Reference Assemblies\microsoft\framework\.netframework\v4.6\facades\System.Diagnostics.Debug.dll"));
@@ -38,7 +38,7 @@ namespace TestHelper
 		internal static string VisualBasicDefaultExt = "vb";
 		internal static string TestProjectName = "TestProject";
 
-		#region  Get Diagnostics
+#region  Get Diagnostics
 
 		/// <summary>
 		/// Given classes in the form of strings, their language, and an IDiagnosticAnalyzer to apply to it, return the diagnostics found in the string after converting it to a document.
@@ -108,9 +108,9 @@ namespace TestHelper
 			return diagnostics.OrderBy(d => d.Location.SourceSpan.Start).ToArray();
 		}
 
-		#endregion
+#endregion
 
-		#region Set up compilation and documents
+#region Set up compilation and documents
 		/// <summary>
 		/// Given an array of strings as sources and a language, turn them into a project and return the documents and spans of it.
 		/// </summary>
@@ -235,7 +235,7 @@ namespace TestHelper
 			return solution;
 		}
 
-		#endregion
+#endregion
 	}
 }
 

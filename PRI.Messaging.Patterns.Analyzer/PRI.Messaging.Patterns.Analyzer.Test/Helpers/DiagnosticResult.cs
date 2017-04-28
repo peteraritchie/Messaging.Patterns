@@ -83,5 +83,7 @@ namespace TestHelper
 				return this.Locations.Length > 0 ? this.Locations[0].Column : -1;
 			}
 		}
+
+		public string Category { get; set; }
 	}
 }

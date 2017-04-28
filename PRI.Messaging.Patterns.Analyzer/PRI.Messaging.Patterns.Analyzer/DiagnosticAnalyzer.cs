@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Linq;
@@ -8,8 +10,10 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
+using Microsoft.CodeAnalysis.FindSymbols;
 using PRI.Messaging.Patterns.Analyzer.Utility;
 using PRI.Messaging.Patterns.Exceptions;
+using PRI.Messaging.Patterns.Extensions.Bus;
 using PRI.Messaging.Primitives;
 
 namespace PRI.Messaging.Patterns.Analyzer
@@ -17,6 +21,8 @@ namespace PRI.Messaging.Patterns.Analyzer
 	[DiagnosticAnalyzer(LanguageNames.CSharp)]
 	public class PRIMessagingPatternsAnalyzer : DiagnosticAnalyzer
 	{
+		#region descriptors
+#if NO_0100
 		public static readonly DiagnosticDescriptor RuleMp0100 = //Call to RequestAsync not awaited
 			new DiagnosticDescriptor("MP0100",
 				GetResourceString(nameof(Resources.Mp0100Title)),
@@ -25,6 +31,7 @@ namespace PRI.Messaging.Patterns.Analyzer
 				DiagnosticSeverity.Warning,
 				isEnabledByDefault: true,
 				description: GetResourceString(nameof(Resources.Mp0100Description)));
+#endif // NO_0100
 		public static readonly DiagnosticDescriptor RuleMp0101 = // Call to RequestAsync with error event but no try.catch.
 			new DiagnosticDescriptor("MP0101",
 				GetResourceString(nameof(Resources.Mp0101Title)),
@@ -33,6 +40,7 @@ namespace PRI.Messaging.Patterns.Analyzer
 				DiagnosticSeverity.Error,
 				isEnabledByDefault: true,
 				description: GetResourceString(nameof(Resources.Mp0101Description)));
+
 		public static readonly DiagnosticDescriptor RuleMp0102 = // consider not using RequestAsync
 			new DiagnosticDescriptor("MP0102",
 				GetResourceString(nameof(Resources.Mp0102Title)),
@@ -41,6 +49,7 @@ namespace PRI.Messaging.Patterns.Analyzer
 				DiagnosticSeverity.Warning,
 				isEnabledByDefault: true,
 				description: GetResourceString(nameof(Resources.Mp0102Description)));
+
 		public static readonly DiagnosticDescriptor RuleMp0103 =
 			new DiagnosticDescriptor("MP0103",
 				GetResourceString(nameof(Resources.Mp0103Title)),
@@ -50,25 +59,295 @@ namespace PRI.Messaging.Patterns.Analyzer
 				isEnabledByDefault: true,
 				description: GetResourceString(nameof(Resources.Mp0103Description)));
 
-		private static LocalizableResourceString GetResourceString(string name) 
-			=> new LocalizableResourceString(name, Resources.ResourceManager, typeof(Resources));
+		public static readonly DiagnosticDescriptor RuleMp0104 =
+			new DiagnosticDescriptor("MP0104", // Message has no handler
+				GetResourceString(nameof(Resources.Mp0104Title)),
+				GetResourceString(nameof(Resources.Mp0104MessageFormat)),
+				"Maintainability",
+				DiagnosticSeverity.Warning,
+				isEnabledByDefault: true,
+				description: GetResourceString(nameof(Resources.Mp0104Description)));
 
-		private ITypeSymbol _iBusSymbol;
-		private static readonly Type _type = typeof(IBus);
+		public static readonly DiagnosticDescriptor RuleMp0110 =
+			new DiagnosticDescriptor("MP0110",
+				GetResourceString(nameof(Resources.Mp0110Title)),
+				GetResourceString(nameof(Resources.Mp0110MessageFormat)),
+				"Naming",
+				DiagnosticSeverity.Warning,
+				isEnabledByDefault: true,
+				description: GetResourceString(nameof(Resources.Mp0110Description)));
+
+		public static readonly DiagnosticDescriptor RuleMp0111 =
+			new DiagnosticDescriptor("MP0111",
+				GetResourceString(nameof(Resources.Mp0111Title)),
+				GetResourceString(nameof(Resources.Mp0111MessageFormat)),
+				"Naming",
+				DiagnosticSeverity.Warning,
+				isEnabledByDefault: true,
+				description: GetResourceString(nameof(Resources.Mp0111Description)));
+
+		public static readonly DiagnosticDescriptor RuleMp0112 =
+			new DiagnosticDescriptor("MP0112",
+				GetResourceString(nameof(Resources.Mp0112Title)),
+				GetResourceString(nameof(Resources.Mp0112MessageFormat)),
+				"Maintainability",
+				DiagnosticSeverity.Error,
+				isEnabledByDefault: true,
+				description: GetResourceString(nameof(Resources.Mp0112Description)));
+
+		public static readonly DiagnosticDescriptor RuleMp0113 =
+			new DiagnosticDescriptor("MP0113",
+				GetResourceString(nameof(Resources.Mp0113Title)),
+				GetResourceString(nameof(Resources.Mp0113MessageFormat)),
+				"Naming",
+				DiagnosticSeverity.Warning,
+				isEnabledByDefault: true,
+				description: GetResourceString(nameof(Resources.Mp0113Description)));
+
+		public static readonly DiagnosticDescriptor RuleMp0114 =
+			new DiagnosticDescriptor("MP0114",
+				GetResourceString(nameof(Resources.Mp0114Title)),
+				GetResourceString(nameof(Resources.Mp0114MessageFormat)),
+				"Maintainability",
+				DiagnosticSeverity.Warning,
+				isEnabledByDefault: true,
+				description: GetResourceString(nameof(Resources.Mp0114Description)));
+
+		public static readonly DiagnosticDescriptor RuleMp0115 =
+			new DiagnosticDescriptor("MP0115",
+				GetResourceString(nameof(Resources.Mp0115Title)),
+				GetResourceString(nameof(Resources.Mp0115MessageFormat)),
+				"Maintainability",
+				DiagnosticSeverity.Warning,
+				isEnabledByDefault: true,
+				description: GetResourceString(nameof(Resources.Mp0115Description)));
+
+		public static readonly DiagnosticDescriptor RuleMp0116 =
+			new DiagnosticDescriptor("MP0116",
+				GetResourceString(nameof(Resources.Mp0116Title)),
+				GetResourceString(nameof(Resources.Mp0116MessageFormat)),
+				"Maintainability",
+				DiagnosticSeverity.Warning,
+				isEnabledByDefault: true,
+				description: GetResourceString(nameof(Resources.Mp0116Description)));
 
 		public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics
-			=> ImmutableArray.Create(RuleMp0100, RuleMp0101, RuleMp0102, RuleMp0103);
+			=> ImmutableArray.Create(
+#if NO_0100
+				RuleMp0100, 
+#endif
+				RuleMp0101, RuleMp0102, RuleMp0103,
+				RuleMp0104, RuleMp0110, RuleMp0111, RuleMp0112, RuleMp0113, RuleMp0114,
+				RuleMp0115);
+#endregion descriptors
+
+		private static LocalizableResourceString GetResourceString(string name)
+			=> new LocalizableResourceString(name, Resources.ResourceManager, typeof(Resources));
+
+		private readonly ConcurrentDictionary<ISymbol, List<SyntaxNode>> _symbolUsage =
+			new ConcurrentDictionary<ISymbol, List<SyntaxNode>>(concurrencyLevel: 2, capacity: 100);
+
+#if DEBUG
+		private static string NotText(bool value)
+		{
+			return value ? "" : "not ";
+		}
+#endif
+		private static readonly MethodInfo PublishMethodInfo =
+			typeof(BusExtensions).GetRuntimeMethods().Single(e1 => e1.Name == nameof(BusExtensions.Publish));
+		private static readonly MethodInfo SendMethodInfo =
+			typeof(BusExtensions).GetRuntimeMethods().Single(e1 => e1.Name == nameof(BusExtensions.Send));
+		private static readonly MethodInfo[] RequestAsyncMethodInfos =
+			typeof(BusExtensions).GetRuntimeMethods()
+			.Where(e1 => e1.Name == nameof(BusExtensions.RequestAsync))
+			.ToArray();
+		private static readonly MethodInfo HandleMethodInfo =
+			typeof(IConsumer<>).GetRuntimeMethods().Single(e1 => e1.Name == nameof(IBus.Handle));
 
 		public override void Initialize(AnalysisContext context)
 		{
 			// TODO: Consider registering other actions that act on syntax instead of or in addition to symbols
 			// See https://github.com/dotnet/roslyn/blob/master/docs/analyzers/Analyzer%20Actions%20Semantics.md for more information
-			context.RegisterSymbolAction(AnalyzeFieldPropertySymbol, SymbolKind.Field, SymbolKind.Property);
 
+			context.RegisterCompilationStartAction(AnalyzeCompilationStart);
 			context.RegisterSyntaxNodeAction(AnalyzeMethodDeclaration, SyntaxKind.MethodDeclaration);
-			context.RegisterSyntaxNodeAction(AnalyzeFieldDeclaration, SyntaxKind.FieldDeclaration);
-			context.RegisterSyntaxNodeAction(AnalyzePropertyDeclaration, SyntaxKind.PropertyDeclaration);
+			//context.RegisterSyntaxNodeAction(AnalyzeFieldDeclaration, SyntaxKind.FieldDeclaration);
+			//context.RegisterSyntaxNodeAction(AnalyzePropertyDeclaration, SyntaxKind.PropertyDeclaration);
+			//context.RegisterSyntaxNodeAction(AnalyzeClassDeclaration, SyntaxKind.ClassDeclaration);
 
+			context.RegisterCompilationAction(analysisContext =>
+			{
+				try
+				{
+					foreach (var key in _symbolUsage.Keys)
+					{
+						var typeSymbol = key as ITypeSymbol;
+						if (typeSymbol != null && typeSymbol.ImplementsInterface<IMessage>())
+						{
+							var compilation = analysisContext.Compilation;
+							if (!_symbolUsage[key].Any(
+								e =>
+								{
+									var semanticModel = compilation.GetSemanticModel(e.SyntaxTree);
+									return e.IsGenericOfType(typeof(IConsumer<>), semanticModel) ||
+										   e.IsTypeArgumentToMethod(semanticModel, analysisContext.CancellationToken,
+											   RequestAsyncMethodInfos) ||
+										   e.IsArgumentToMethod(semanticModel, analysisContext.CancellationToken,
+											   PublishMethodInfo) ||
+										   e.IsArgumentToMethod(semanticModel, analysisContext.CancellationToken,
+											   RequestAsyncMethodInfos) ||
+										   e.IsArgumentToMethod(semanticModel, analysisContext.CancellationToken,
+											   HandleMethodInfo) ||
+										   e.IsArgumentToMethod(semanticModel, analysisContext.CancellationToken,
+											   SendMethodInfo);
+								}))
+							{
+								Debug.WriteLine($"Message Symbol {key} not used.");
+								analysisContext.ReportDiagnostic(typeSymbol.CreateDiagnostic(RuleMp0114, key.ToString()));
+							}
+						}
+					}
+
+				}
+				catch (Exception ex)
+				{
+					Debug.WriteLine($"{ex.GetType().Name} : {ex.Message}");
+				}
+			});
+			context.RegisterSyntaxNodeAction(analysisContext =>
+			{
+				var info = analysisContext.SemanticModel.GetSymbolInfo(analysisContext.Node, analysisContext.CancellationToken);
+				var symbol = info.Symbol;
+				if (info.Symbol == null)
+				{
+					if (info.CandidateReason == CandidateReason.None)
+					{
+						return;
+					}
+					var suitableCandidateSymbols = info.CandidateSymbols
+						.Where(
+							e =>
+								(e.Kind == SymbolKind.Local || e.Kind == SymbolKind.NamedType || e.Kind != SymbolKind.Namespace) &&
+								e.OriginalDefinition != null && e.Locations[0].IsInSource)
+						.ToArray();
+					if (!suitableCandidateSymbols.Any())
+					{
+						return;
+					}
+					symbol = suitableCandidateSymbols.First();
+				}
+				Debug.WriteLine($"==> Identifier name {analysisContext.Node.ToString()} visited, of type {symbol.OriginalDefinition.Name} ({symbol.OriginalDefinition.Kind})");
+				if (symbol?.Kind == SymbolKind.Local)
+					symbol = analysisContext.SemanticModel.GetTypeInfo(analysisContext.Node).Type;
+				if (symbol?.Kind == SymbolKind.Namespace || symbol?.OriginalDefinition == null || symbol?.OriginalDefinition?.Kind != SymbolKind.NamedType)
+				{
+					// Avoid getting Locations for namespaces. That can be very expensive.
+					return;
+				}
+				var inSource = symbol?.OriginalDefinition?.Locations[0].IsInSource == true;
+				if (!inSource)
+				{
+					return;
+				}
+				var hasLocations = symbol?.OriginalDefinition?.Locations.Length > 0;
+				if (!hasLocations)
+				{
+					return;
+				}
+
+				_symbolUsage.AddOrUpdate(symbol.OriginalDefinition, new List<SyntaxNode> {analysisContext.Node.Parent}, (existingSymbol, existingValue) =>
+				{
+					existingValue.Add(analysisContext.Node.Parent);
+					return existingValue;
+				});
+			}, SyntaxKind.IdentifierName, SyntaxKind.GenericName);
+			context.RegisterSyntaxNodeAction(analysisContext =>
+			{
+				var symbol = analysisContext.SemanticModel.GetDeclaredSymbol(analysisContext.Node);
+				if (symbol?.Kind == SymbolKind.Namespace)
+				{
+					// Avoid getting Locations for namespaces. That can be very expensive.
+					return;
+				}
+				_symbolUsage.TryAdd(symbol, new List<SyntaxNode> { /*analysisContext.Node.Parent*/ });
+#if DEBUG
+				var declaration = analysisContext.Node as TypeDeclarationSyntax;
+				Debug.Assert(declaration != null);
+				Debug.WriteLine($"==> {declaration.Keyword} {declaration.Identifier.Text} declared using symbol {symbol.Name}");
+#endif
+			}, SyntaxKind.ClassDeclaration, SyntaxKind.StructDeclaration);
+		}
+
+		private void AnalyzeCompilationStart(CompilationStartAnalysisContext compilationContext)
+		{
+			var compilation = compilationContext.Compilation;
+			compilationContext.RegisterSyntaxTreeAction(context =>
+			{
+				if (!compilation.SyntaxTrees.Contains(context.Tree))
+					return;
+				var semanticModel = compilation.GetSemanticModel(context.Tree);
+				var root = context.Tree.GetRoot(context.CancellationToken);
+				var model = compilationContext.Compilation.GetSemanticModel(context.Tree);
+				if (model.IsFromGeneratedCode(compilationContext.CancellationToken))
+					return;
+				var visitor = new MessagePatternsSyntaxWalker(semanticModel, context);
+				visitor.Visit(root);
+			});
+			compilationContext.RegisterSymbolAction(context =>
+			{
+				var namedTypeSymbol = (INamedTypeSymbol)context.Symbol;
+				if (namedTypeSymbol.IsNamespace)
+				{
+					return;
+				}
+
+				CheckNaming(namedTypeSymbol, context);
+			}, SymbolKind.NamedType);
+		}
+
+		private string[] validEventSuffixes_en = { "Event", "Response" };
+		private string[] validMessageSuffixes_en = { "Message", "Request", Utilities.CommandMessageClassSuffix };
+
+		private void CheckNaming(INamedTypeSymbol namedTypeSymbol, SymbolAnalysisContext context)
+		{
+			var name = namedTypeSymbol.Name;
+			if (string.IsNullOrWhiteSpace(name))
+			{
+				return;
+			}
+			if (namedTypeSymbol.ImplementsInterface<IEvent>())
+			{
+				if (!validEventSuffixes_en.Any(e => name.EndsWith(e, StringComparison.Ordinal)))
+				{
+					context.ReportDiagnostic(namedTypeSymbol.CreateDiagnostic(RuleMp0110, name));
+				}
+			}
+			// IEvent derives from IMessage, so don't check if we've checked IEvent
+			else if (namedTypeSymbol.ImplementsInterface<IMessage>())
+			{
+				if (!validMessageSuffixes_en.Any(e => name.EndsWith(e, StringComparison.Ordinal)))
+				{
+					context.ReportDiagnostic(namedTypeSymbol.CreateDiagnostic(RuleMp0110, name));
+				}
+			}
+			if(namedTypeSymbol.ImplementsInterface(typeof(IConsumer<>)))
+			{
+				if (!name.EndsWith(Utilities.HandlerClassSuffix, StringComparison.Ordinal))
+				{
+					context.ReportDiagnostic(namedTypeSymbol.CreateDiagnostic(RuleMp0111, name));
+				}
+				else
+				{
+					foreach (var @interface in namedTypeSymbol.AllInterfaces.Where(e => e.IsGenericType && e.TypeParameters.Length == 1 && e.Name.StartsWith("IConsumer", StringComparison.Ordinal)))
+					{
+						var suggestedName = $"{@interface.TypeArguments.First().Name}Handler";
+						if (!name.Equals(suggestedName, StringComparison.Ordinal))
+						{
+							context.ReportDiagnostic(namedTypeSymbol.CreateDiagnostic(RuleMp0113, name, suggestedName));
+						}
+					}
+				}
+			}
 		}
 
 		private void AnalyzeMethodDeclaration(SyntaxNodeAnalysisContext analysisContext)
@@ -83,6 +362,7 @@ namespace PRI.Messaging.Patterns.Analyzer
 			{
 				var methodDeclarationSyntax = analysisContext.Node as MethodDeclarationSyntax;
 				Debug.Assert(methodDeclarationSyntax != null, "methodDeclarationSyntax != null");
+
 				foreach (
 					var invocationSyntax in methodDeclarationSyntax.DescendantNodes(_ => true).OfType<InvocationExpressionSyntax>())
 				{
@@ -109,7 +389,7 @@ namespace PRI.Messaging.Patterns.Analyzer
 					{
 						continue;
 					}
-					if (!ImplementsIBus(invokedIdentifierTypeInfo))
+					if (!invokedIdentifierTypeInfo.ImplementsInterface<IBus>())
 					{
 						continue;
 					}
@@ -123,99 +403,23 @@ namespace PRI.Messaging.Patterns.Analyzer
 
 					if (Utilities.IsRequestAsync(methodSymbolInfo))
 					{
-						if (!(invocationSyntax.Parent is AwaitExpressionSyntax))
+						if (AnalyzeRequestAsyncInvocation(analysisContext, cancellationToken, invocationSyntax, methodExpression,
+							invocationSyntaxExpression, semanticModel))
 						{
-							var diagnostic = Diagnostic.Create(RuleMp0100,
-								methodExpression.GetLocation());
-
-							analysisContext.ReportDiagnostic(diagnostic);
-						}
-						var parent = invocationSyntax.Parent;
-						TryStatementSyntax parentTryStatement = null;
-						while (!(parent is MethodDeclarationSyntax))
-						{
-							if (parent is BlockSyntax)
-							{
-								parentTryStatement = parent.Parent as TryStatementSyntax;
-								if (parentTryStatement != null)
-								{
-									break;
-								}
-							}
-							parent = parent.Parent;
-						}
-						var genericNameSyntax = (GenericNameSyntax) invocationSyntaxExpression.Name; //.TypeArgumentList
-						if (parentTryStatement == null)
-						{
-							if (genericNameSyntax.TypeArgumentList.Arguments.Count > 2)
-							{
-								var diagnostic = Diagnostic.Create(RuleMp0101,
-									methodExpression.GetLocation());
-
-								analysisContext.ReportDiagnostic(diagnostic);
-							}
-						}
-						else
-						{
-							// get catch type
-							var exceptionType = typeof(ReceivedErrorEventException<>);
-							var firstRightCatch = parentTryStatement.GetFirstCatchClauseByType(semanticModel, exceptionType,
-								cancellationToken);
-							if (firstRightCatch == null)
-							{
-								var diagnostic = Diagnostic.Create(RuleMp0101,
-									methodExpression.GetLocation());
-
-								analysisContext.ReportDiagnostic(diagnostic);
-							}
-							else
-							{
-								var errorType =
-									semanticModel.GetTypeInfo(firstRightCatch.Declaration.Type, cancellationToken).Type as INamedTypeSymbol;
-								if (errorType == null)
-								{
-									var diagnostic = Diagnostic.Create(RuleMp0101,
-										methodExpression.GetLocation());
-
-									analysisContext.ReportDiagnostic(diagnostic);
-								}
-								else
-								{
-									var catchErrorEventType = errorType.TypeArguments[0];
-									var argumentErrorEventType =
-										semanticModel.GetTypeInfo(genericNameSyntax.TypeArgumentList.Arguments[2], cancellationToken).Type;
-									// check that the type parameter to the error type is the same as the error
-									// event parameter in the RequestAsync invocation
-									if (!argumentErrorEventType.Equals(catchErrorEventType))
-									{
-										var diagnostic = Diagnostic.Create(RuleMp0101,
-											methodExpression.GetLocation());
-
-										analysisContext.ReportDiagnostic(diagnostic);
-									}
-									else
-									{
-										var messageType =
-											semanticModel.GetTypeInfo(genericNameSyntax.TypeArgumentList.Arguments[0], cancellationToken).Type;
-										if (ImplementsInterface<IEvent>(messageType))
-										{
-											var diagnostic = Diagnostic.Create(RuleMp0103,
-												methodExpression.GetLocation());
-
-											analysisContext.ReportDiagnostic(diagnostic);
-										}
-										else
-										{
-											var diagnostic = Diagnostic.Create(RuleMp0102,
-												methodExpression.GetLocation());
-
-											analysisContext.ReportDiagnostic(diagnostic);
-										}
-									}
-								}
-							}
+							return;
 						}
 					}
+				}
+				var methodSymbol = analysisContext.SemanticModel.GetDeclaredSymbol(methodDeclarationSyntax) as IMethodSymbol;
+				if (methodSymbol != null && methodSymbol.IsImplementationOf(HandleMethodInfo)
+					&& methodSymbol.ContainingType.IsCommandMessageType())
+				{
+					// if body does not contain BusExtensions.Publish invocation, diagnose.
+					if (!methodDeclarationSyntax.Invokes(PublishMethodInfo, analysisContext.SemanticModel, analysisContext.CancellationToken))
+					{
+						analysisContext.ReportDiagnostic(methodDeclarationSyntax.CreateDiagnostic(RuleMp0115, ((TypeDeclarationSyntax)methodDeclarationSyntax.Parent).GetIdentifier().ToString()));
+					}
+					return;
 				}
 			}
 			catch (Exception ex)
@@ -224,78 +428,230 @@ namespace PRI.Messaging.Patterns.Analyzer
 			}
 		}
 
-		private bool ImplementsInterface<TInterface>(ITypeSymbol typeSymbol)
+		private static bool AnalyzeRequestAsyncInvocation(SyntaxNodeAnalysisContext analysisContext,
+			CancellationToken cancellationToken, InvocationExpressionSyntax invocationSyntax, SyntaxNode methodExpression,
+			MemberAccessExpressionSyntax invocationSyntaxExpression, SemanticModel semanticModel)
 		{
-			var type = typeof(TInterface);
-			if (!type.GetTypeInfo().IsInterface)
+#if NO_0100
+			if (!(invocationSyntax.Parent is AwaitExpressionSyntax))
 			{
-				throw new ArgumentException("Type is not an interface", nameof(typeSymbol));
-			}
-			var typeCandidateSymbol = typeSymbol.Interfaces
-				.SingleOrDefault(e => e.ToString() == type.FullName);
-			if (typeCandidateSymbol == null)
-			{
-				return false;
-			}
-			return $"{typeCandidateSymbol}, {typeCandidateSymbol.ContainingAssembly.Identity}" == type.AssemblyQualifiedName;
-		}
+				// if assigning to variable
+				if (invocationSyntax.Parent is EqualsValueClauseSyntax)
+				{
+					if (((VariableDeclarationSyntax) invocationSyntax.Parent.Parent.Parent).Type
+						.IsVar)
+					{
+						var diagnostic = Diagnostic.Create(RuleMp0100,
+							methodExpression.GetLocation());
+						// else
+						analysisContext.ReportDiagnostic(diagnostic);
+						return true;
+					} // TODO: else with non-fixable diagnostic
+				}
+				else
+				{
+					var assignmentExpression = invocationSyntax.Parent as AssignmentExpressionSyntax;
+					if (assignmentExpression != null && ((TypeSyntax) assignmentExpression.Left).IsVar)
+					{
+						var diagnostic = Diagnostic.Create(RuleMp0100,
+							methodExpression.GetLocation());
 
-		private bool ImplementsIBus(ITypeSymbol invokedIdentifierTypeInfo)
-		{
-			var type = _type;
-			if (_iBusSymbol != null)
-			{
-				return invokedIdentifierTypeInfo.Interfaces.Contains(_iBusSymbol)
-					|| Equals(_iBusSymbol, invokedIdentifierTypeInfo);
+						analysisContext.ReportDiagnostic(diagnostic);
+						return true;
+					} // TODO: else with non-fixable diagnostic
+				}
 			}
-			var iBusCandidateSymbol = invokedIdentifierTypeInfo.ToString() == type.FullName
-				? invokedIdentifierTypeInfo
-				: invokedIdentifierTypeInfo.Interfaces
-					.SingleOrDefault(e => e.ToString() == type.FullName);
-			if (iBusCandidateSymbol == null)
+#endif
+			var parent = invocationSyntax.Parent;
+			TryStatementSyntax parentTryStatement = null;
+			while (!(parent is MethodDeclarationSyntax))
 			{
-				return false;
+				if (parent is BlockSyntax)
+				{
+					parentTryStatement = parent.Parent as TryStatementSyntax;
+					if (parentTryStatement != null)
+					{
+						break;
+					}
+				}
+				parent = parent.Parent;
 			}
-			if($"{iBusCandidateSymbol}, {iBusCandidateSymbol.ContainingAssembly.Identity}" == _type.AssemblyQualifiedName)
+			var genericNameSyntax = (GenericNameSyntax) invocationSyntaxExpression.Name;
+			if (parentTryStatement == null)
 			{
-				_iBusSymbol = iBusCandidateSymbol;
-				return true;
+				if (genericNameSyntax.TypeArgumentList.Arguments.Count > 2)
+				{
+					var diagnostic = Diagnostic.Create(RuleMp0101,
+						methodExpression.GetLocation());
+
+					analysisContext.ReportDiagnostic(diagnostic);
+					return true;
+				}
+			}
+			else
+			{
+				// get catch type
+				var exceptionType = typeof(ReceivedErrorEventException<>);
+				var firstRightCatch = parentTryStatement.GetFirstCatchClauseByType(semanticModel, exceptionType,
+					cancellationToken);
+				if (firstRightCatch == null)
+				{
+					var diagnostic = Diagnostic.Create(RuleMp0101,
+						methodExpression.GetLocation());
+
+					analysisContext.ReportDiagnostic(diagnostic);
+					return true;
+				}
+				else
+				{
+					var errorType =
+						semanticModel.GetTypeInfo(firstRightCatch.Declaration.Type, cancellationToken).Type as INamedTypeSymbol;
+					if (errorType == null)
+					{
+						var diagnostic = Diagnostic.Create(RuleMp0101,
+							methodExpression.GetLocation());
+
+						analysisContext.ReportDiagnostic(diagnostic);
+					}
+					else
+					{
+						var catchErrorEventType = errorType.TypeArguments[0];
+						var argumentErrorEventType =
+							semanticModel.GetTypeInfo(genericNameSyntax.TypeArgumentList.Arguments[2], cancellationToken).Type;
+						// check that the type parameter to the error type is the same as the error
+						// event parameter in the RequestAsync invocation
+						if (!argumentErrorEventType.Equals(catchErrorEventType))
+						{
+							var diagnostic = Diagnostic.Create(RuleMp0101,
+								methodExpression.GetLocation());
+
+							analysisContext.ReportDiagnostic(diagnostic);
+						}
+						else
+						{
+							var messageType =
+								semanticModel.GetTypeInfo(genericNameSyntax.TypeArgumentList.Arguments[0], cancellationToken).Type;
+							if (!messageType.ImplementsInterface<IEvent>())
+							{
+								var diagnostic = Diagnostic.Create(RuleMp0102,
+									methodExpression.GetLocation());
+
+								analysisContext.ReportDiagnostic(diagnostic);
+							}
+						}
+					}
+				}
 			}
 			return false;
 		}
 
-		private void AnalyzePropertyDeclaration(SyntaxNodeAnalysisContext obj)
+		public class MessagePatternsSyntaxWalker : CSharpSyntaxWalker
 		{
-			// TODO:
-		}
 
-		private void AnalyzeFieldDeclaration(SyntaxNodeAnalysisContext obj)
-		{
-			// TODO: Check initializer?
-		}
+			private readonly SemanticModel _semanticModel;
+			private readonly SyntaxTreeAnalysisContext _context;
 
-		private void AnalyzeFieldPropertySymbol(SymbolAnalysisContext context)
-		{
-			var fieldSymbol = context.Symbol as IFieldSymbol;
-			ITypeSymbol type;
-			if (fieldSymbol == null)
+			public MessagePatternsSyntaxWalker(SemanticModel semanticModel, SyntaxTreeAnalysisContext context)
 			{
-				var propertySymbol = context.Symbol as IPropertySymbol;
-				if (propertySymbol == null)
+				_semanticModel = semanticModel;
+				_context = context;
+			}
+
+			public override void VisitMethodDeclaration(MethodDeclarationSyntax node)
+			{
+				var methodSymbol = _semanticModel.GetDeclaredSymbol(node);
+				bool isHandleImplementation = methodSymbol.ContainingType
+					.AllInterfaces
+					 .SelectMany(@interface => @interface.GetMembers().OfType<IMethodSymbol>())
+					 .Any(method => methodSymbol.Equals(methodSymbol.ContainingType.FindImplementationForInterfaceMember(method)));
+				if(!isHandleImplementation)
 				{
+					base.VisitMethodDeclaration(node);
+				}
+				var methodCalls = node.DescendantNodes().OfType<InvocationExpressionSyntax>()
+					.Where(IsInterestingInvocation).ToArray();
+				Debug.WriteLine(isHandleImplementation);
+			}
+
+			private bool IsInterestingInvocation(InvocationExpressionSyntax e)
+			{
+				return e.IsInvocationOfPublish(_semanticModel, _context.CancellationToken) || e.IsInvocationOfHandle(_semanticModel, _context.CancellationToken) || e.IsInvocationOfSend(_semanticModel, _context.CancellationToken);
+			}
+
+			public override void VisitInvocationExpression(InvocationExpressionSyntax node)
+			{
+				var invocationSyntaxExpression = node.Expression as MemberAccessExpressionSyntax;
+				if (invocationSyntaxExpression == null)
+				{
+					base.VisitInvocationExpression(node);
 					return;
 				}
-				type = propertySymbol.Type;
-			}
-			else
-			{
-				type = fieldSymbol.Type;
+				var childNodes = invocationSyntaxExpression.ChildNodes().ToArray();
+				// assumes identifier in use is the first element (IBus), and the method invoked on it
+				// is the second
+				if (childNodes.Length < 2)
+				{
+					base.VisitInvocationExpression(node);
+					return;
+				}
+				var invokedIdentifierName = childNodes.ElementAt(0) as IdentifierNameSyntax;
+				if (invokedIdentifierName == null)
+				{
+					base.VisitInvocationExpression(node);
+					return;
+				}
+				var invokedIdentifierTypeInfo = _semanticModel.GetTypeInfo(invokedIdentifierName, _context.CancellationToken).Type;
+				if (invokedIdentifierTypeInfo == null || invokedIdentifierTypeInfo.TypeKind == TypeKind.Error)
+				{
+					base.VisitInvocationExpression(node);
+					return;
+				}
+
+				if (!invokedIdentifierTypeInfo.ImplementsInterface<IBus>())
+				{
+					base.VisitInvocationExpression(node);
+					return;
+				}
+				
+				VisitIBusInvocationExpression(node, childNodes);
+
+				base.VisitInvocationExpression(node);
 			}
 
-			if (type.AllInterfaces.Any(i => i.Name == _type.Name))
+			private void VisitIBusInvocationExpression(InvocationExpressionSyntax node, SyntaxNode[] childNodes)
 			{
-				_iBusSymbol = type;
+				if (node.IsInvocationOfSend(_semanticModel, _context.CancellationToken))
+				{
+					var argumentExpression = node.ArgumentList.Arguments[0].Expression;
+					var typeInfo = _semanticModel.GetTypeInfo(argumentExpression);
+					if (typeInfo.Type != null && typeInfo.Type.ImplementsInterface<IEvent>())
+					{
+						_context.ReportDiagnostic(node.CreateDiagnostic(RuleMp0112, argumentExpression.ToString()));
+					}
+				}
+				else if (node.IsInvocationOfMethod(RequestAsyncMethodInfos, _semanticModel, _context.CancellationToken))
+				{
+					var argumentExpression = node.ArgumentList.Arguments[0].Expression;
+					var typeInfo = _semanticModel.GetTypeInfo(argumentExpression);
+					if (typeInfo.Type != null && typeInfo.Type.ImplementsInterface<IEvent>())
+					{
+						_context.ReportDiagnostic(node.CreateDiagnostic(RuleMp0103, argumentExpression.ToString()));
+					}
+				}
 			}
 		}
+
+		//private void AnalyzePropertyDeclaration(SyntaxNodeAnalysisContext obj)
+		//{
+		//	// TODO:
+		//}
+
+		//private void AnalyzeFieldDeclaration(SyntaxNodeAnalysisContext obj)
+		//{
+		//	// TODO: Check initializer?
+		//}
 	}
 }
+
+
+

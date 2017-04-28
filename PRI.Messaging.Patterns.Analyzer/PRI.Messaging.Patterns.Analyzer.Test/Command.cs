@@ -1,4 +1,5 @@
-﻿using System;
+﻿#if true
+using System;
 using System.Diagnostics;
 using System.Threading.Tasks;
 using PRI.Messaging.Patterns;
@@ -6,7 +7,7 @@ using PRI.Messaging.Patterns.Exceptions;
 using PRI.Messaging.Patterns.Extensions.Bus;
 using PRI.Messaging.Primitives;
 
-namespace Test
+namespace TestX
 {
 	public class Command : IMessage
 	{
@@ -109,8 +110,8 @@ namespace Test
 					CorrelationId = Guid.NewGuid().ToString("D")
 				};
 				bus.Send(command);
-				var completedEvent = await bus.RequestAsync<Command, CommandCompletedEvent<Command>, ErrorEvent<Exception>>(command);
-				Console.WriteLine(completedEvent.CorrelationId);
+				var completedEvent = bus.RequestAsync<Command, CommandCompletedEvent<Command>, ErrorEvent<Exception>>(command);
+				Console.WriteLine(completedEvent.Result.CorrelationId);
 			}
 			catch (ReceivedErrorEventException<ErrorEvent<Exception>> ex)
 			{
@@ -222,5 +223,18 @@ namespace PRI.Test
 		public string CorrelationId { get; set; }
 		public DateTime OccurredDateTime { get; set; }
 	}
+	public class TheEvent : IEvent
+	{
+		public string CorrelationId { get; set; }
+		public DateTime OccurredDateTime { get; set; }
+	}
 
+	public class TheEventHandler : IConsumer<TheEvent>
+	{
+		public void Handle(TheEvent message)
+		{
+			throw new NotImplementedException();
+		}
+	}
 }
+#endif

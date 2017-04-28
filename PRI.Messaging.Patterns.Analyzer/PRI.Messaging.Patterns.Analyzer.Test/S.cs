@@ -1,4 +1,5 @@
-﻿using PRI.Messaging.Primitives;
+﻿#if FALSE
+using PRI.Messaging.Primitives;
 
 namespace PRI.Test
 {
@@ -21,3 +22,4 @@ namespace System.Diagnostics
 		}
 	}
 }
+#endif

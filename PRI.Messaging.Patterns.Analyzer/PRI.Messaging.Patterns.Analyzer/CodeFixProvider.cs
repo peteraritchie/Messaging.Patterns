@@ -15,11 +15,11 @@ using Microsoft.CodeAnalysis.Editing;
 using Microsoft.CodeAnalysis.FindSymbols;
 using Microsoft.CodeAnalysis.Formatting;
 using Microsoft.CodeAnalysis.Simplification;
-using Microsoft.CodeAnalysis.Text;
 using PRI.Messaging.Patterns.Analyzer.Utility;
 using PRI.Messaging.Patterns.Exceptions;
 using PRI.Messaging.Patterns.Extensions.Bus;
 using PRI.Messaging.Primitives;
+using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 
 namespace PRI.Messaging.Patterns.Analyzer
 {
@@ -27,7 +27,11 @@ namespace PRI.Messaging.Patterns.Analyzer
 	public class PRIMessagingPatternsAnalyzerCodeFixProvider : CodeFixProvider
 	{
 		public sealed override ImmutableArray<string> FixableDiagnosticIds
-			=> ImmutableArray.Create(PRIMessagingPatternsAnalyzer.RuleMp0100.Id, PRIMessagingPatternsAnalyzer.RuleMp0101.Id,
+			=> ImmutableArray.Create(
+#if NO_0100
+				PRIMessagingPatternsAnalyzer.RuleMp0100.Id,
+#endif
+				PRIMessagingPatternsAnalyzer.RuleMp0101.Id,
 				PRIMessagingPatternsAnalyzer.RuleMp0102.Id/*, PRIMessagingPatternsAnalyzer.RuleMp0103.Id*/);
 
 		// See https://github.com/dotnet/roslyn/blob/master/docs/analyzers/FixAllProvider.md for more information on Fix All Providers
@@ -36,7 +40,9 @@ namespace PRI.Messaging.Patterns.Analyzer
 		private readonly Dictionary<string, KeyValuePair<string, Func<Diagnostic, Document, CancellationToken, Task<Document>>>> _documentDiagnosticInvocations
 			= new Dictionary<string, KeyValuePair<string, Func<Diagnostic, Document, CancellationToken, Task<Document>>>>
 			{
+#if NO_0100
 				{"MP0100", new KeyValuePair<string, Func<Diagnostic, Document, CancellationToken, Task<Document>>>("bleah", InvokeMp0100)},
+#endif
 				{"MP0101", new KeyValuePair<string, Func<Diagnostic, Document, CancellationToken, Task<Document>>>("bleah", InvokeMp0101)},
 			};
 		private readonly Dictionary<string, KeyValuePair<string, Func<Diagnostic, Solution, Document, CancellationToken, Task<Solution>>>> _solutionDiagnosticInvocations
@@ -55,16 +61,11 @@ namespace PRI.Messaging.Patterns.Analyzer
 			CancellationToken cancellationToken)
 		{
 			// the diagnostic.Location here will be the span of the RequestAsync<> GenericNameSyntax object
-			Debug.WriteLine(diagnostic.Location.GetSpanText());
 
 			var root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
 			var model = await document.GetSemanticModelAsync(cancellationToken);
 			var generator = SyntaxGenerator.GetGenerator(document);
 
-			// TODO: go looking for a reference to c'tor of a IBus type.
-			//SymbolFinder.FindImplementationsAsync()
-				// find c'tors
-				// find all references to one of those c'tors
 			MemberAccessExpressionSyntax requestAsyncMemberAccess;
 			SyntaxNode requestAsyncInvocationStatement;
 			StatementSyntax[] requestAsyncAndDependantStatements;
@@ -87,14 +88,18 @@ namespace PRI.Messaging.Patterns.Analyzer
 				Utilities.GetRequestAsyncInfo(requestAsyncMemberAccess, model, out messageType, out eventType, out errorEventType);
 
 				// Get span of code around RequestAsync for event handler
-				handleMethodParameterName = SyntaxFactory.Identifier(
+				handleMethodParameterName = Identifier(
 					requestAsyncMemberAccess.GetAssignmentSymbol(model, cancellationToken).Name);
 
-				document = document.ReplaceNode(subjectNode, subjectNode.WithAdditionalAnnotations(subjectNodeAnnotation), out root, out model);
+				document = document.ReplaceNode(subjectNode, subjectNode.WithAdditionalAnnotations(subjectNodeAnnotation), out root,
+					out model);
 				subjectNode = root.GetAnnotatedNodes(subjectNodeAnnotation).Single();
 
 				var containingMember = subjectNode.GetContainingMemberDeclaration() as MethodDeclarationSyntax;
-				fullContainingNamespaceName = model.GetDeclaredSymbol(containingMember.Parent, cancellationToken).ContainingNamespace.GetFullNamespaceName();
+				Debug.Assert(containingMember != null, "containingMember != null");
+				fullContainingNamespaceName =
+					// ReSharper disable once PossibleNullReferenceException
+					model.GetDeclaredSymbol(containingMember.Parent, cancellationToken).ContainingNamespace.GetFullNamespaceName();
 
 				document = document.ReplaceNode(containingMember,
 					containingMember
@@ -123,6 +128,7 @@ namespace PRI.Messaging.Patterns.Analyzer
 							if (catchStatement != null)
 							{
 								var errorType = model.GetTypeInfo(catchStatement.Declaration.Type, cancellationToken).Type as INamedTypeSymbol;
+								// ReSharper disable once PossibleNullReferenceException
 								if (errorEventType.ToString().Equals(errorType.TypeArguments[0].ToString()))
 								{
 									catchExceptionIdentifier = catchStatement.Declaration.Identifier;
@@ -139,7 +145,8 @@ namespace PRI.Messaging.Patterns.Analyzer
 						throw new InvalidOperationException();
 					}
 
-					errorEventHandlerMessageParameterIdentifier = GenerateUniqueParameterIdentifierForScope(errorEventType, model, catchStatement.Block);
+					errorEventHandlerMessageParameterIdentifier = GenerateUniqueParameterIdentifierForScope(errorEventType, model,
+						catchStatement.Block);
 					catchStatement = catchStatement.ReplaceNodes(
 						catchStatement.Block.DescendantNodes().Where(e => e is ExpressionSyntax),
 						(a, b) => Simplifier.Expand(a, model, document.Project.Solution.Workspace));
@@ -149,15 +156,15 @@ namespace PRI.Messaging.Patterns.Analyzer
 					{
 						catchStatement = catchStatement.ReplaceNode(firstStatement,
 							firstStatement.WithLeadingTrivia(
-								SyntaxFactory.Comment("// TODO: Load message information from repository by CorrelationId"),
-								SyntaxFactory.LineFeed));
+								Comment("// TODO: Load message information from a repository by CorrelationId"),
+								LineFeed));
 					}
 					else
 					{
 						catchStatement = catchStatement.WithBlock(catchStatement.Block.WithOpenBraceToken(
-							SyntaxFactory.Token(SyntaxKind.CloseBraceToken)
-								.WithLeadingTrivia(SyntaxFactory.Comment("// TODO: Load message information from repository by CorrelationId"),
-									SyntaxFactory.LineFeed)));
+							Token(SyntaxKind.CloseBraceToken)
+								.WithLeadingTrivia(Comment("// TODO: Load message information from a repository by CorrelationId"),
+									LineFeed)));
 					}
 
 					foreach (var statement in catchStatement.Block.DescendantNodes(_ => true)
@@ -170,10 +177,11 @@ namespace PRI.Messaging.Patterns.Analyzer
 						.ToArray())
 					{
 						catchStatement = catchStatement.ReplaceNode(statement,
-							SyntaxFactory.IdentifierName(errorEventHandlerMessageParameterIdentifier));
+							IdentifierName(errorEventHandlerMessageParameterIdentifier));
 					}
 
-					document = document.ReplaceNode(tryCandidate, tryCandidate.WithAdditionalAnnotations(tryAnnotation), out root, out model);
+					document = document.ReplaceNode(tryCandidate, tryCandidate.WithAdditionalAnnotations(tryAnnotation), out root,
+						out model);
 				}
 				subjectNode = root.GetAnnotatedNodes(subjectNodeAnnotation).Single();
 				requestAsyncInvocationStatement = subjectNode.GetAncestorStatement();
@@ -182,19 +190,24 @@ namespace PRI.Messaging.Patterns.Analyzer
 					.Where(x => eventHandlerStatementsSpan.Contains(x.Span) && x != requestAsyncInvocationStatement)
 					.ToArray();
 				// expand in original document and add to block
-				eventHandlerHandleMethodBody = SyntaxFactory.Block(SyntaxFactory.List(requestAsyncAndDependantStatements
+				eventHandlerHandleMethodBody = Block(List(requestAsyncAndDependantStatements
 					.Select(e => Simplifier.Expand(e, model, document.Project.Solution.Workspace))
 					.ToArray()));
+				eventHandlerHandleMethodBody = eventHandlerHandleMethodBody.ReplaceNode(eventHandlerHandleMethodBody.Statements.First(),
+					eventHandlerHandleMethodBody.Statements.First().WithLeadingTrivia(
+						Comment("// TODO: Load message information from a repository by CorrelationId"),
+						LineFeed));
 			}
 
 			var options = document.Project.Solution.Workspace.Options;
-			var namespaceIdentifierName = SyntaxFactory.IdentifierName(fullContainingNamespaceName);
+			var namespaceIdentifierName = IdentifierName(fullContainingNamespaceName);
 
 			// start of modifications
+			ClassDeclarationSyntax eventHandlerDeclaration;
 			{
-				#region create event handler declaration
+#region create event handler declaration
 				{
-					var eventHandlerDeclaration = Utilities.MessageHandlerDeclaration(
+					eventHandlerDeclaration = Utilities.MessageHandlerDeclaration(
 						eventType,
 						generator, eventHandlerHandleMethodBody,
 						handleMethodParameterName);
@@ -220,24 +233,25 @@ namespace PRI.Messaging.Patterns.Analyzer
 					root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
 					model = await document.GetSemanticModelAsync(cancellationToken);
 				}
-				#endregion create event handler declaration
+
+#endregion create event handler declaration
 
 				// replace the call to RequestAsync and dependant statements with call to Sendr 
 				root = root.ReplaceNodes(requestAsyncAndDependantStatements,
-					SyntaxFactory.ExpressionStatement(
-							SyntaxFactory.InvocationExpression(
-									SyntaxFactory.MemberAccessExpression(
+					ExpressionStatement(
+							InvocationExpression(
+									MemberAccessExpression(
 										SyntaxKind.SimpleMemberAccessExpression,
 										requestAsyncMemberAccess.Expression, // "bus"
-										SyntaxFactory.IdentifierName(nameof(BusExtensions.Send))
+										IdentifierName(nameof(BusExtensions.Send))
 											.WithAdditionalAnnotations(subjectNodeAnnotation)))
 								.WithArgumentList(((InvocationExpressionSyntax) requestAsyncMemberAccess.Parent).ArgumentList))
 						.WithLeadingTrivia(
-							SyntaxFactory.Comment("// TODO: store information about the message with CorrelationId for loading in handlers"),
-							SyntaxFactory.CarriageReturnLineFeed));
+							Comment("// TODO: store information about the message with CorrelationId for loading in handlers"),
+							CarriageReturnLineFeed));
 
 				// remove async and change return type
-				var containingMember = (MethodDeclarationSyntax)root.GetAnnotatedNodes(containingMemberAnnotation).Single();
+				var containingMember = (MethodDeclarationSyntax) root.GetAnnotatedNodes(containingMemberAnnotation).Single();
 				root = root.ReplaceNode(containingMember, containingMember.WithoutAsync()
 					.WithAdditionalAnnotations(Formatter.Annotation));
 				// remove try/catch
@@ -248,123 +262,111 @@ namespace PRI.Messaging.Patterns.Analyzer
 			}
 
 			// error event handler class:
-			var errorEventHandlerDeclaration = Utilities.MessageHandlerDeclaration(
-				errorEventType,
-				generator, catchStatement.Block,
-				errorEventHandlerMessageParameterIdentifier);
-
+			ClassDeclarationSyntax errorEventHandlerDeclaration;
 			{
+				errorEventHandlerDeclaration = Utilities.MessageHandlerDeclaration(
+					errorEventType,
+					generator, catchStatement.Block,
+					errorEventHandlerMessageParameterIdentifier);
 				var ns = (NamespaceDeclarationSyntax) generator
 					.NamespaceDeclaration(namespaceIdentifierName)
 					.WithAdditionalAnnotations(Formatter.Annotation);
 				// create new document
-				var errorEventHandlerDocument = document.Project.AddDocument(errorEventHandlerDeclaration.Identifier.ValueText + ".cs",
-					ns.AddMembers(errorEventHandlerDeclaration).NormalizeWhitespace().ToString());
+				var errorEventHandlerDocument =
+					document.Project.AddDocument(errorEventHandlerDeclaration.Identifier.ValueText + ".cs",
+						ns.AddMembers(errorEventHandlerDeclaration).NormalizeWhitespace().ToString());
 				document = errorEventHandlerDocument.Project.GetDocument(document.Id);
 
 				errorEventHandlerDocument = await ImportAdder.AddImportsAsync(errorEventHandlerDocument, options, cancellationToken);
-				Debug.WriteLine("after import, before format");
-				Debug.WriteLine((await errorEventHandlerDocument.GetSyntaxRootAsync(cancellationToken)).ToString());
-#if DEBUG
-				var t = await Formatter.FormatAsync(errorEventHandlerDocument,
-					cancellationToken: cancellationToken);
-#endif // DEBUG
-				Debug.WriteLine("after import, after format");
-				Debug.WriteLine((await t.GetSyntaxRootAsync(cancellationToken)).ToString());
 				errorEventHandlerDocument = await Simplifier.ReduceAsync(errorEventHandlerDocument, options, cancellationToken);
-				Debug.WriteLine("after import, after reduce");
-				Debug.WriteLine((await errorEventHandlerDocument.GetSyntaxRootAsync(cancellationToken)).ToString());
 				errorEventHandlerDocument = await Formatter.FormatAsync(errorEventHandlerDocument,
 					cancellationToken: cancellationToken);
-				Debug.WriteLine("after import, after reduce, after format");
-				Debug.WriteLine((await errorEventHandlerDocument.GetSyntaxRootAsync(cancellationToken)).ToString());
 				solution = errorEventHandlerDocument.Project.Solution.WithDocumentText(errorEventHandlerDocument.Id,
 					await errorEventHandlerDocument.GetTextAsync(cancellationToken));
 			}
 			{
 				document = solution.GetDocument(document.Id);
 				model = await document.GetSemanticModelAsync(cancellationToken);
-				root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
-				// TODO: go looking for a reference to c'tor of a IBus type.
+				root = await document
+					.GetSyntaxRootAsync(cancellationToken)
+					.ConfigureAwait(false);
+
+				// go looking for a reference to c'tor of a IBus type.
 				var busSend = root.GetAnnotatedNodes(subjectNodeAnnotation).Single();
 				requestAsyncMemberAccess =
-					busSend.Parent.AncestorsAndSelf().OfType<MemberAccessExpressionSyntax>().First();
+					busSend.Parent.AncestorsAndSelf()
+						.OfType<MemberAccessExpressionSyntax>()
+						.First();
 				var busSymbol = model.GetTypeInfo(requestAsyncMemberAccess.Expression).Type as INamedTypeSymbol;
+				Debug.Assert(busSymbol != null, "busSymbol != null");
+				IMethodSymbol ctorSymbol;
+				// ReSharper disable once PossibleNullReferenceException
 				if (busSymbol.TypeKind == TypeKind.Interface)
 				{
 					var busImplementations = await SymbolFinder.FindImplementationsAsync(busSymbol, solution,
 						cancellationToken: cancellationToken);
 					foreach (INamedTypeSymbol impl in busImplementations.OfType<INamedTypeSymbol>())
 					{
-						var ctorSymbol = impl.Constructors.SingleOrDefault(e => !e.IsStatic && e.Parameters.Length == 0);
 						// only implementations with public constructors
+						ctorSymbol = impl.Constructors.SingleOrDefault(e => !e.IsStatic && e.Parameters.Length == 0);
 						if (ctorSymbol != null)
 						{
-							var handlerSymbol = impl.GetMembers(nameof(IBus.AddHandler)).Single();
-							var references = await SymbolFinder.FindReferencesAsync(handlerSymbol, solution, cancellationToken);
-							if (references.Any(e => e.Locations.Any()))
+							busSymbol = impl;
+							break;
+						}
+					}
+				}
+				ctorSymbol = busSymbol.Constructors.SingleOrDefault(e => !e.IsStatic && e.Parameters.Length == 0);
+				var handlerSymbol = busSymbol.GetMembers(nameof(IBus.AddHandler)).Single();
+				// ReSharper disable once PossibleUnintendedReferenceComparison
+				if (handlerSymbol != default(ISymbol))
+				{
+					var references = (await SymbolFinder.FindReferencesAsync(handlerSymbol,
+						solution, cancellationToken)).ToArray();
+					if (references.Any(e => e.Locations.Any()))
+					{
+						// TODO: add AddHandlers at this location
+						var definition = references
+							.GroupBy(e => e.Definition)
+							.OrderByDescending(g => g.Count())
+							.First();
+					}
+					else
+					{
+						// no add handlers at the moment, let's just find where it was constructed.
+						var locations =
+							(await SymbolFinder.FindReferencesAsync(ctorSymbol, solution, cancellationToken))
+							.SelectMany(e => e.Locations).ToArray();
+						if (locations.Length != 0)
+						{
+							var referencedLocation = locations.First();
 							{
-								var definition = references
-									.GroupBy(e => e.Definition)
-									.OrderByDescending(g => g.Count())
-									.First();
-							}
-							else
-							{
-								// no add handlers at the moment, let's just find where it was constructed.
-								var locations =
-									(await SymbolFinder.FindReferencesAsync(ctorSymbol, solution, cancellationToken))
-									.SelectMany(e => e.Locations);
-								if (locations.Count() == 1)
+								var referencedLocationDocument = referencedLocation.Document;
+								var referencedRoot = await referencedLocationDocument.GetSyntaxRootAsync(cancellationToken);
+								var node = referencedRoot.FindNode(referencedLocation.Location.SourceSpan);
+								var statement = node.GetAncestorStatement();
+								var busNode = statement.GetAssignmentToken().WithLeadingTrivia().WithTrailingTrivia();
+								var busNodeName = IdentifierName(busNode);
+								if (busNodeName != null)
 								{
-									var referencedLocation = locations.First();
-									var referencedRoot = await referencedLocation.Document.GetSyntaxRootAsync(cancellationToken);
-									var node = referencedRoot.FindNode(referencedLocation.Location.SourceSpan);
-									var statement = node.GetAncestorStatement();
-									var busNode = statement.GetAssignmentToken(model).WithLeadingTrivia().WithTrailingTrivia();
-									// add after this statement
-									generator = SyntaxGenerator.GetGenerator(document);
-									referencedRoot = referencedRoot.InsertNodesAfter(statement, new[]
-									{
-										SyntaxFactory.ExpressionStatement(
-											(ExpressionSyntax) generator.InvocationExpression(
-												generator.MemberAccessExpression(
-													SyntaxFactory.IdentifierName(busNode),
-													nameof(IBus.AddHandler)),
-												generator.ObjectCreationExpression(
-													SyntaxFactory.IdentifierName(
-														errorEventHandlerDeclaration.Identifier))
-											)
-										)
-									});
-									var newDocument = referencedLocation.Document.WithSyntaxRoot(referencedRoot);
-									solution = newDocument.Project.Solution;
-								}
-								else
-								{
-									if (locations.Any())
-									{
-									}
+									var errorEventHandlerName =
+										IdentifierName(errorEventHandlerDeclaration.Identifier);
+									referencedLocationDocument = InsertAddHandlerCall(
+										referencedLocationDocument,
+										referencedLocation, busNodeName, errorEventHandlerName);
+									var eventHandlerName =
+										IdentifierName(eventHandlerDeclaration.Identifier);
+									referencedLocationDocument = InsertAddHandlerCall(
+										referencedLocationDocument,
+										referencedLocation, busNodeName, eventHandlerName);
+									solution = referencedLocationDocument.Project.Solution;
 								}
 							}
 						}
 					}
 				}
-				else
-				{
-					var busDeclaration = busSymbol.DeclaringSyntaxReferences.First();
-				}
-				//var t = busSymbol.Interfaces.FirstOrDefault(e => e.Name == typeof(IBus).Name);
-				//if (t != null)
-				//{
-				//	busSymbol = t;
-				//}
-				//var references = await SymbolFinder.FindReferencesAsync(busSymbol, solution, cancellationToken); 
-
-				// find c'tors
-				// find all references to one of those c'tors
+				return solution;
 			}
-			return solution;
 		}
 
 		private static SyntaxToken GenerateUniqueParameterIdentifierForScope(ISymbol namedTypeSymbol, SemanticModel model, SyntaxNode block)
@@ -378,7 +380,7 @@ namespace PRI.Messaging.Patterns.Analyzer
 				name = $"{baseName}{i}";
 				++i;
 			}
-			return SyntaxFactory.Identifier(name);
+			return Identifier(name);
 		}
 
 		private static async Task<Document> InvokeMp0101(Diagnostic diagnostic, Document document,
@@ -397,33 +399,33 @@ namespace PRI.Messaging.Patterns.Analyzer
 			var model = await document.GetSemanticModelAsync(cancellationToken);
 			var root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
 			Func<IdentifierNameSyntax, SyntaxList<StatementSyntax>> generateCatchStatements =
-				exceptionIdentifierName => SyntaxFactory.SingletonList<StatementSyntax>(
-					SyntaxFactory.ExpressionStatement(
-						SyntaxFactory.InvocationExpression(
-								SyntaxFactory.MemberAccessExpression(
+				exceptionIdentifierName => SingletonList<StatementSyntax>(
+					ExpressionStatement(
+						InvocationExpression(
+								MemberAccessExpression(
 									SyntaxKind.SimpleMemberAccessExpression,
-									SyntaxFactory.MemberAccessExpression(
+									MemberAccessExpression(
 										SyntaxKind.SimpleMemberAccessExpression,
-										SyntaxFactory.MemberAccessExpression(
+										MemberAccessExpression(
 											SyntaxKind.SimpleMemberAccessExpression,
-											SyntaxFactory.AliasQualifiedName(
-												SyntaxFactory.IdentifierName(
-													SyntaxFactory.Token(SyntaxKind.GlobalKeyword)
-														.WithLeadingTrivia(SyntaxFactory.Comment("// TODO: do something with ex.ErrorEvent"),
-															SyntaxFactory.CarriageReturnLineFeed)
+											AliasQualifiedName(
+												IdentifierName(
+													Token(SyntaxKind.GlobalKeyword)
+														.WithLeadingTrivia(Comment("// TODO: do something with ex.ErrorEvent"),
+															CarriageReturnLineFeed)
 												),
-												SyntaxFactory.IdentifierName(nameof(System))),
-											SyntaxFactory.IdentifierName(nameof(System.Diagnostics))),
-										SyntaxFactory.IdentifierName(nameof(Debug))),
-									SyntaxFactory.IdentifierName(nameof(Debug.WriteLine))))
+												IdentifierName(nameof(System))),
+											IdentifierName(nameof(System.Diagnostics))),
+										IdentifierName(nameof(Debug))),
+									IdentifierName(nameof(Debug.WriteLine))))
 							.WithArgumentList(
-								SyntaxFactory.ArgumentList(
-									SyntaxFactory.SingletonSeparatedList(
-										SyntaxFactory.Argument(
-											SyntaxFactory.MemberAccessExpression(
+								ArgumentList(
+									SingletonSeparatedList(
+										Argument(
+											MemberAccessExpression(
 												SyntaxKind.SimpleMemberAccessExpression,
 												exceptionIdentifierName,
-												SyntaxFactory.IdentifierName(nameof(ReceivedErrorEventException<IEvent>.ErrorEvent)))))))));
+												IdentifierName(nameof(ReceivedErrorEventException<IEvent>.ErrorEvent)))))))));
 			// Find the type declaration identified by the diagnostic.
 			var subjectToken = root.FindToken(diagnostic.Location.SourceSpan.Start);
 			var invocation =
@@ -457,6 +459,7 @@ namespace PRI.Messaging.Patterns.Analyzer
 					model), document.Project.Solution.Workspace, document.Project.Solution.Workspace.Options));
 		}
 
+#if NO_0100
 		private static async Task<Document> InvokeMp0100(Diagnostic diagnostic, Document document, CancellationToken cancellationToken)
 		{
 			var diagnosticSpan = diagnostic.Location.SourceSpan;
@@ -464,7 +467,44 @@ namespace PRI.Messaging.Patterns.Analyzer
 
 			// Find the type declaration identified by the diagnostic.
 			var invocation = root.FindToken(diagnosticSpan.Start).Parent.AncestorsAndSelf().OfType<InvocationExpressionSyntax>().First();
-			return await CodeAnalysisUtilities.InvokeAsync(document, invocation, cancellationToken);
+			document = await CodeAnalysisUtilities.InvokeAsync(document, invocation, cancellationToken);
+			root = await document.GetSyntaxRootAsync(cancellationToken);
+			var awaitExpression = root.FindNode(invocation.Span) as AwaitExpressionSyntax;
+			invocation = (InvocationExpressionSyntax) awaitExpression.Expression;
+			var semanticModel = await document.GetSemanticModelAsync(cancellationToken);
+			// TODO: find usages of the left identifier and remove ".Result" 
+			if (invocation.Parent is EqualsValueClauseSyntax)
+			{
+				var symbol =
+					semanticModel.GetDeclaredSymbol(((VariableDeclarationSyntax) invocation.Parent.Parent.Parent).Variables.First());
+			}
+			else
+			{
+				var assignmentExpression = invocation.Parent as AssignmentExpressionSyntax;
+				Debug.Assert(assignmentExpression != null);
+				// find references to assignmentExpression.Left
+				var x = assignmentExpression.Left;
+			}
+			return document;
+		}
+#endif
+		private static Document InsertAddHandlerCall(Document document, ReferenceLocation location, IdentifierNameSyntax busNodeName, IdentifierNameSyntax errorEventHandlerName)
+		{
+			var root = document.GetSyntaxRootAsync().Result;
+			var generator = SyntaxGenerator.GetGenerator(document);
+			var statement = root.FindNode(location.Location.SourceSpan).GetAncestorStatement();
+			root = root.InsertNodesAfter(statement, new[]
+			{
+				ExpressionStatement(
+					(ExpressionSyntax) generator.InvocationExpression(
+						generator.MemberAccessExpression(
+							IdentifierName(busNodeName.ToString()),
+							nameof(IBus.AddHandler)),
+						generator.ObjectCreationExpression(
+							IdentifierName(errorEventHandlerName.ToString())))
+				)
+			});
+			return document.WithSyntaxRoot(root);
 		}
 
 		public sealed override Task RegisterCodeFixesAsync(CodeFixContext context)

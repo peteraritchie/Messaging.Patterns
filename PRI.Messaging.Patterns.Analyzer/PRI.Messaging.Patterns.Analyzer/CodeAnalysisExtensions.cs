@@ -11,8 +11,8 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Editing;
 using Microsoft.CodeAnalysis.Formatting;
-using Microsoft.CodeAnalysis.Simplification;
 using Microsoft.CodeAnalysis.Text;
+using PRI.Messaging.Patterns.Analyzer.Utility;
 
 namespace PRI.Messaging.Patterns.Analyzer
 {
@@ -274,8 +274,8 @@ namespace PRI.Messaging.Patterns.Analyzer
 				}
 				else
 				{
-					var equals = parent as EqualsValueClauseSyntax;
-					var variableDeclarator = @equals?.Parent as VariableDeclaratorSyntax;
+					var equalsValueClause = parent as EqualsValueClauseSyntax;
+					var variableDeclarator = equalsValueClause?.Parent as VariableDeclaratorSyntax;
 					if (variableDeclarator != null)
 					{
 						symbol = model.GetDeclaredSymbol(variableDeclarator, cancellationToken);
@@ -285,7 +285,7 @@ namespace PRI.Messaging.Patterns.Analyzer
 			}
 		}
 
-		public static SyntaxToken GetAssignmentToken(this SyntaxNode parent, SemanticModel model, CancellationToken cancellationToken = default(CancellationToken))
+		public static SyntaxToken GetAssignmentToken(this SyntaxNode parent)
 		{
 			while (true)
 			{
@@ -310,14 +310,15 @@ namespace PRI.Messaging.Patterns.Analyzer
 
 				if (simpleAssignment != null)
 				{
+					// TODO: support AssignmentExpressionSyntax in GetAssignmentToken
 					var xxx = simpleAssignment.Left;
 					throw new NotImplementedException();
 				}
 				else
 				{
-					var equals = parent as EqualsValueClauseSyntax;
-					var variableDeclarator = @equals?.Parent as VariableDeclaratorSyntax;
-					return variableDeclarator.Identifier;
+					var equalsValueClause = parent as EqualsValueClauseSyntax;
+					var variableDeclarator = equalsValueClause?.Parent as VariableDeclaratorSyntax;
+					return variableDeclarator?.Identifier ?? default(SyntaxToken);
 				}
 			}
 		}
@@ -415,6 +416,7 @@ namespace PRI.Messaging.Patterns.Analyzer
 			}
 		}
 
+#if NO_0100
 		/// <summary>
 		/// Create a new MethodDeclaration that returns Task or Task{T} and has async modifier.
 		/// </summary>
@@ -437,6 +439,7 @@ namespace PRI.Messaging.Patterns.Analyzer
 				.WithModifiers(method.Modifiers.Add(SyntaxFactory.Token(SyntaxKind.AsyncKeyword)))
 				.WithAdditionalAnnotations(Formatter.Annotation);
 		}
+#endif
 
 		public static MethodDeclarationSyntax WithoutAsync(this MethodDeclarationSyntax method)
 		{
@@ -451,19 +454,173 @@ namespace PRI.Messaging.Patterns.Analyzer
 					method.Modifiers.Single(e => e.IsKind(SyntaxKind.AsyncKeyword))));
 		}
 
-		public static MethodDeclarationSyntax GetContainingMethodDeclaration(SyntaxNode invocation)
+		public static bool IsGenericOfType(this SyntaxNode node, Type type, SemanticModel semanticModel)
 		{
-			return invocation.Ancestors().OfType<MethodDeclarationSyntax>().FirstOrDefault();
+			if (node == null)
+			{
+				throw new ArgumentNullException(nameof(node));
+			}
+			if (type == null)
+			{
+				throw new ArgumentNullException(nameof(type));
+			}
+			if (semanticModel == null)
+			{
+				throw new ArgumentNullException(nameof(semanticModel));
+			}
+			if (!(node is TypeArgumentListSyntax))
+			{
+				return false;
+			}
+			SyntaxNode genericNameSyntax = null;
+			if (node.Parent is GenericNameSyntax)
+			{
+				genericNameSyntax = node.Parent;
+			}
+			else if (node.Parent.Parent is GenericNameSyntax)
+			{
+				genericNameSyntax = node.Parent.Parent;
+			}
+			var simpleBaseTypeSyntax = genericNameSyntax?.Parent as SimpleBaseTypeSyntax;
+			if (simpleBaseTypeSyntax == null || !(genericNameSyntax.Parent.Parent is BaseListSyntax))
+			{
+				return false;
+			}
+			var containingGeneric = simpleBaseTypeSyntax.Type as GenericNameSyntax;
+			return containingGeneric != null && containingGeneric.IsConstructedGenericOf(type, semanticModel);
 		}
 
-		public static INamespaceSymbol GetContainingNamespace(this MemberDeclarationSyntax member, SemanticModel model)
+		public static bool IsTypeArgumentToMethod(this SyntaxNode node, SemanticModel semanticModel,
+			CancellationToken cancellationToken,
+			IEnumerable<MethodInfo> methodInfos)
 		{
-			return model.GetDeclaredSymbol(member.Parent).ContainingNamespace;
+			if (methodInfos == null)
+			{
+				return false;
+			}
+			if (!(node is TypeArgumentListSyntax))
+			{
+				return false;
+			}
+			if (!(node.Parent.Parent is MemberAccessExpressionSyntax))
+			{
+				return false;
+			}
+			if (!(node.Parent is GenericNameSyntax))
+			{
+				return false;
+			}
+			var methodInfoArray = methodInfos as MethodInfo[] ?? methodInfos.ToArray();
+			if (methodInfoArray.All(e => e.Name != ((GenericNameSyntax) node.Parent).Identifier.Text))
+			{
+				return false;
+			}
+			return methodInfoArray.Any(
+				methodInfo =>
+					((InvocationExpressionSyntax) node.Parent.Parent.Parent).ArgumentList.Arguments[0].Expression.IsArgumentToMethod(
+						semanticModel, cancellationToken, methodInfo));
 		}
 
-		public static INamespaceSymbol GetContainingNamespace(this TypeDeclarationSyntax type, SemanticModel model)
+		public static bool IsArgumentToMethod(this SyntaxNode node, SemanticModel semanticModel,
+			CancellationToken cancellationToken,
+			IEnumerable<MethodInfo> methodInfos)
 		{
-			return model.GetDeclaredSymbol(type).ContainingNamespace;
+			return methodInfos.Any(methodInfo => node.IsArgumentToMethod(semanticModel, cancellationToken, methodInfo));
+		}
+
+		public static bool IsArgumentToMethod(this SyntaxNode node, SemanticModel semanticModel, CancellationToken cancellationToken,
+			MethodInfo methodInfo)
+		{
+			if (!(node is ObjectCreationExpressionSyntax) && !(node is IdentifierNameSyntax) && !(node is ArgumentSyntax))
+			{
+				return false;
+			}
+			var argument = node as ArgumentSyntax ?? node.Parent as ArgumentSyntax;
+			var argumentList = argument?.Parent as ArgumentListSyntax;
+			var invocationExpression = argumentList?.Parent as InvocationExpressionSyntax;
+			if (invocationExpression == null)
+			{
+				return false;
+			}
+			return invocationExpression.IsInvocationOfMethod(
+					methodInfo, semanticModel, cancellationToken);
+		}
+
+		public static bool IsImplementationOf(this IMethodSymbol methodSymbol, MethodInfo methodInfo)
+		{
+			return methodSymbol.ContainingType.ImplementsInterface(methodInfo.DeclaringType) &&
+			       methodSymbol.Parameters.Length == methodInfo.GetParameters().Length && methodSymbol.Name == methodInfo.Name;
+		}
+
+		public static bool Invokes(this MethodDeclarationSyntax methodDeclaration, MethodInfo methodInfo,
+			SemanticModel semanticModel, CancellationToken cancellationToken)
+		{
+			return methodDeclaration
+				.Body
+				.Statements
+				.OfType<ExpressionStatementSyntax>()
+				.Any(e => e.Expression.Kind() == SyntaxKind.InvocationExpression &&
+				          ((InvocationExpressionSyntax) e.Expression).IsInvocationOfMethod(methodInfo, semanticModel,
+					          cancellationToken));
+		}
+
+		public static bool IsCommandMessageType(this INamedTypeSymbol symbol)
+		{
+			return symbol != null && symbol.Name.StartsWith(Utilities.CommandMessageClassSuffix, StringComparison.Ordinal);
+		}
+
+		private static bool IsInvocationImpl(InvocationExpressionSyntax node, SemanticModel semanticModel,
+			Func<SimpleNameSyntax, SemanticModel, CancellationToken, bool> predicate, CancellationToken cancellationToken)
+		{
+			var memberAccessExpression = node.Expression as MemberAccessExpressionSyntax;
+			if (memberAccessExpression != null)
+			{
+				return predicate(memberAccessExpression.Name, semanticModel, cancellationToken);
+			}
+			var memberBindingExpression = node.Expression as MemberBindingExpressionSyntax;
+			if (memberBindingExpression != null)
+			{
+				return predicate(memberBindingExpression.Name, semanticModel, cancellationToken);
+			}
+			return false;
+		}
+
+		public static bool IsInvocationOfMethod(this InvocationExpressionSyntax invocationExpression,
+			IEnumerable<MethodInfo> methodInfos, SemanticModel semanticModel, CancellationToken cancellationToken)
+		{
+			return methodInfos.Any(m => invocationExpression.IsInvocationOfMethod(m, semanticModel, cancellationToken));
+		}
+
+		public static bool IsInvocationOfMethod(this InvocationExpressionSyntax invocationExpression, MethodInfo methodInfo, SemanticModel semanticModel, CancellationToken cancellationToken)
+		{
+			return IsInvocationImpl(invocationExpression, semanticModel,
+				(name, model, c) => Utilities.IsMember(name, methodInfo, model, c), cancellationToken);
+		}
+
+		public static bool IsInvocationOfPublish(this InvocationExpressionSyntax node, SemanticModel semanticModel, CancellationToken cancellationToken)
+		{
+			return IsInvocationImpl(node, semanticModel, Utilities.IsPublish, cancellationToken);
+		}
+
+		public static bool IsInvocationOfSend(this InvocationExpressionSyntax node, SemanticModel semanticModel, CancellationToken cancellationToken)
+		{
+			return IsInvocationImpl(node, semanticModel, Utilities.IsSend, cancellationToken);
+		}
+
+		public static bool IsInvocationOfHandle(this InvocationExpressionSyntax node, SemanticModel semanticModel, CancellationToken cancellationToken)
+		{
+			return IsInvocationImpl(node, semanticModel, Utilities.IsHandle, cancellationToken);
+		}
+
+		public static bool IsConstructedGenericOf(this GenericNameSyntax typeSyntax, Type type, SemanticModel semanticModel)
+		{
+			var symbolInfo = semanticModel.GetSymbolInfo(typeSyntax);
+			var typeSymbol = symbolInfo.Symbol as ITypeSymbol;
+			if (typeSymbol != null)
+			{
+				return typeSymbol.IsOfType(type);
+			}
+			return false;
 		}
 
 		public static string GetFullNamespaceName(this INamespaceSymbol @namespace)
@@ -475,8 +632,6 @@ namespace PRI.Messaging.Patterns.Analyzer
 		{
 			var method = memberDeclarationSyntax as MethodDeclarationSyntax;
 			if (method != null) return method.Identifier;
-			//var @namespace = memberDeclarationSyntax as NamespaceDeclarationSyntax;
-			//if (@namespace != null) return @namespace.Identifier;
 			var @delegate = memberDeclarationSyntax as DelegateDeclarationSyntax;
 			if (@delegate != null) return @delegate.Identifier;
 			var type = memberDeclarationSyntax as TypeDeclarationSyntax;
@@ -488,13 +643,6 @@ namespace PRI.Messaging.Patterns.Analyzer
 			return default(SyntaxToken);
 		}
 
-		public static Document ReplaceNode(this Document document, SyntaxNode original, SyntaxNode replacement)
-		{
-			SyntaxNode root;
-			SemanticModel model;
-			return document.ReplaceNode(original, replacement, out root, out model);
-		}
-
 		public static Document ReplaceNode(this Document document, SyntaxNode original, SyntaxNode replacement, out SyntaxNode root, out SemanticModel model)
 		{
 			var currentRoot = document.GetSyntaxRootAsync().Result;
@@ -503,6 +651,59 @@ namespace PRI.Messaging.Patterns.Analyzer
 			root = newDocument.GetSyntaxRootAsync().Result;
 			model = newDocument.GetSemanticModelAsync().Result;
 			return newDocument;
+		}
+
+		public static bool ImplementsInterface<TInterface>(this TypeDeclarationSyntax typeDeclaration,
+			SemanticModel model)
+		{
+			var type = typeof(TInterface);
+			if (!type.GetTypeInfo().IsInterface)
+			{
+				throw new ArgumentException("Type is not an interface", nameof(TInterface));
+			}
+			return typeDeclaration?.BaseList != null &&
+			       typeDeclaration.BaseList.Types.Select(baseType => model.GetTypeInfo(baseType.Type))
+				       .Any(typeInfo => typeInfo.Type.IsOfType<TInterface>()
+				                        || typeInfo.Type.ImplementsInterface<TInterface>());
+		}
+
+		public static bool ImplementsInterface(this ITypeSymbol typeSymbol, Type type)
+		{
+			if (!type.GetTypeInfo().IsInterface)
+			{
+				throw new ArgumentException("Type is not an interface", nameof(typeSymbol));
+			}
+
+			if (typeSymbol.Interfaces.Concat(new[] {typeSymbol})
+				.Any(e => e.IsOfType(type)))
+			{
+				return true;
+			}
+
+			return typeSymbol.AllInterfaces.Concat(new[] {typeSymbol})
+				.Any(e => e.IsOfType(type));
+		}
+
+		public static bool ImplementsInterface<TInterface>(this ITypeSymbol typeSymbol)
+		{
+			return ImplementsInterface(typeSymbol, typeof(TInterface));
+		}
+
+		public static bool IsOfType<T>(this ITypeSymbol typeSymbol)
+		{
+			return IsOfType(typeSymbol, typeof(T));
+		}
+
+		public static bool IsOfType(this ITypeSymbol typeSymbol, Type type)
+		{
+			if (type.GetTypeInfo().IsGenericTypeDefinition)
+			{
+				return
+					$"{typeSymbol.ContainingNamespace}.{typeSymbol.OriginalDefinition.MetadataName}, {typeSymbol.ContainingAssembly.Identity}" ==
+					type.AssemblyQualifiedName;
+			}
+			return typeSymbol.ToString() == type.FullName &&
+			       $"{typeSymbol}, {typeSymbol.ContainingAssembly.Identity}" == type.AssemblyQualifiedName;
 		}
 	}
 }

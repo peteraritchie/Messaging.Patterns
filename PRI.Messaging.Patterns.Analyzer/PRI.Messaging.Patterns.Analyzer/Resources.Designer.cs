@@ -168,5 +168,221 @@ namespace PRI.Messaging.Patterns.Analyzer {
                 return ResourceManager.GetString("Mp0103Title", resourceCulture);
             }
         }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Message class has no handler.
+        /// </summary>
+        internal static string Mp0104Description {
+            get {
+                return ResourceManager.GetString("Mp0104Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Message class has no handler.
+        /// </summary>
+        internal static string Mp0104MessageFormat {
+            get {
+                return ResourceManager.GetString("Mp0104MessageFormat", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Message class has no handler.
+        /// </summary>
+        internal static string Mp0104Title {
+            get {
+                return ResourceManager.GetString("Mp0104Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Message type identifiers should not have incorrect suffix: consider &quot;Message&quot;, &quot;Command&quot;, or &quot;Request&quot; for IMessage-derived type identifiers, or &quot;Event&quot;, or &quot;Response&quot; for IEvent type identifiers..
+        /// </summary>
+        internal static string Mp0110Description {
+            get {
+                return ResourceManager.GetString("Mp0110Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Message type identifier &quot;{0}&quot; has incorrect suffix..
+        /// </summary>
+        internal static string Mp0110MessageFormat {
+            get {
+                return ResourceManager.GetString("Mp0110MessageFormat", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Message type identifiier has incorrect suffix..
+        /// </summary>
+        internal static string Mp0110Title {
+            get {
+                return ResourceManager.GetString("Mp0110Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to IConsumer&lt;T&gt; implementation identifiers should not have incorrect suffix: consider &quot;Handler&quot; for IConsumer&lt;T&gt; type identifiers..
+        /// </summary>
+        internal static string Mp0111Description {
+            get {
+                return ResourceManager.GetString("Mp0111Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to IConsumer&lt;T&gt; type identifier &quot;{0}&quot; has incorrect suffix..
+        /// </summary>
+        internal static string Mp0111MessageFormat {
+            get {
+                return ResourceManager.GetString("Mp0111MessageFormat", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to IConsumer&lt;T&gt; type identifier has incorrect suffix..
+        /// </summary>
+        internal static string Mp0111Title {
+            get {
+                return ResourceManager.GetString("Mp0111Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to IBus.Send exists to be explicit about sending messages and IBus.Publish to be explicit about publishing events..
+        /// </summary>
+        internal static string Mp0112Description {
+            get {
+                return ResourceManager.GetString("Mp0112Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to IBus.Send called with and IEvent argument &quot;{0}&quot; instead of IBus.Publish..
+        /// </summary>
+        internal static string Mp0112MessageFormat {
+            get {
+                return ResourceManager.GetString("Mp0112MessageFormat", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to IBus.Send has incorrect argument type..
+        /// </summary>
+        internal static string Mp0112Title {
+            get {
+                return ResourceManager.GetString("Mp0112Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to IConsumer&lt;T&gt; implementation type names should have form &quot;&lt;MessageType&gt;Handler&quot;..
+        /// </summary>
+        internal static string Mp0113Description {
+            get {
+                return ResourceManager.GetString("Mp0113Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to &quot;{0}&quot; is poorly named, consider naming it &quot;{1}&quot;..
+        /// </summary>
+        internal static string Mp0113MessageFormat {
+            get {
+                return ResourceManager.GetString("Mp0113MessageFormat", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to IConsumer&lt;T&gt; implementation type has incorrect name..
+        /// </summary>
+        internal static string Mp0113Title {
+            get {
+                return ResourceManager.GetString("Mp0113Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Message types should be either consumed or produced..
+        /// </summary>
+        internal static string Mp0114Description {
+            get {
+                return ResourceManager.GetString("Mp0114Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to {0} is neither an argument of IConsumer&lt;T&gt; nor a argument to IBus.Send or IBus.Publish..
+        /// </summary>
+        internal static string Mp0114MessageFormat {
+            get {
+                return ResourceManager.GetString("Mp0114MessageFormat", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Message types should be either consumed or produced..
+        /// </summary>
+        internal static string Mp0114Title {
+            get {
+                return ResourceManager.GetString("Mp0114Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Command handlers should publish events describing state changes..
+        /// </summary>
+        internal static string Mp0115Description {
+            get {
+                return ResourceManager.GetString("Mp0115Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to {0} uses the Command Message convention to signify a state change request but does not publish events describing state changes..
+        /// </summary>
+        internal static string Mp0115MessageFormat {
+            get {
+                return ResourceManager.GetString("Mp0115MessageFormat", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Command handlers should publish events describing state changes..
+        /// </summary>
+        internal static string Mp0115Title {
+            get {
+                return ResourceManager.GetString("Mp0115Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Message handlers should propagate correlation id when producing messages..
+        /// </summary>
+        internal static string Mp0116Description {
+            get {
+                return ResourceManager.GetString("Mp0116Description", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to {0} message handler {1} message but does not propagate correlation id..
+        /// </summary>
+        internal static string Mp0116MessageFormat {
+            get {
+                return ResourceManager.GetString("Mp0116MessageFormat", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Message handlers should propagate correlation id when producing messages..
+        /// </summary>
+        internal static string Mp0116Title {
+            get {
+                return ResourceManager.GetString("Mp0116Title", resourceCulture);
+            }
+        }
     }
 }

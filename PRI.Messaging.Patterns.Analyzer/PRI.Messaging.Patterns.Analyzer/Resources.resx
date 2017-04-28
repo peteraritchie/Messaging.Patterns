@@ -165,4 +165,100 @@
     <value>RequestAsync called with event as message to send.</value>
     <comment>The title of the diagnostic.</comment>
   </data>
+  <data name="Mp0104Description" xml:space="preserve">
+    <value>Message class has no handler</value>
+    <comment>Consider using separate IConsumer&lt;T&gt; implementations instead of RequestAsync.</comment>
+  </data>
+  <data name="Mp0104MessageFormat" xml:space="preserve">
+    <value>Message class has no handler</value>
+    <comment>The format-able message the diagnostic displays.</comment>
+  </data>
+  <data name="Mp0104Title" xml:space="preserve">
+    <value>Message class has no handler</value>
+    <comment>The title of the diagnostic.</comment>
+  </data>
+  <data name="Mp0110Description" xml:space="preserve">
+    <value>Message type identifiers should not have incorrect suffix: consider "Message", "Command", or "Request" for IMessage-derived type identifiers, or "Event", or "Response" for IEvent type identifiers.</value>
+    <comment>Consider using separate IConsumer&lt;T&gt; implementations instead of RequestAsync.</comment>
+  </data>
+  <data name="Mp0110MessageFormat" xml:space="preserve">
+    <value>Message type identifier "{0}" has incorrect suffix.</value>
+    <comment>The format-able message the diagnostic displays.</comment>
+  </data>
+  <data name="Mp0110Title" xml:space="preserve">
+    <value>Message type identifiier has incorrect suffix.</value>
+    <comment>The title of the diagnostic.</comment>
+  </data>
+  <data name="Mp0111Description" xml:space="preserve">
+    <value>IConsumer&lt;T&gt; implementation identifiers should not have incorrect suffix: consider "Handler" for IConsumer&lt;T&gt; type identifiers.</value>
+    <comment>Consider using separate IConsumer&lt;T&gt; implementations instead of RequestAsync.</comment>
+  </data>
+  <data name="Mp0111MessageFormat" xml:space="preserve">
+    <value>IConsumer&lt;T&gt; type identifier "{0}" has incorrect suffix.</value>
+    <comment>The format-able message the diagnostic displays.</comment>
+  </data>
+  <data name="Mp0111Title" xml:space="preserve">
+    <value>IConsumer&lt;T&gt; type identifier has incorrect suffix.</value>
+    <comment>The title of the diagnostic.</comment>
+  </data>
+  <data name="Mp0112Description" xml:space="preserve">
+    <value>IBus.Send exists to be explicit about sending messages and IBus.Publish to be explicit about publishing events.</value>
+    <comment>Consider using separate IConsumer&lt;T&gt; implementations instead of RequestAsync.</comment>
+  </data>
+  <data name="Mp0112MessageFormat" xml:space="preserve">
+    <value>IBus.Send called with and IEvent argument "{0}" instead of IBus.Publish.</value>
+    <comment>The format-able message the diagnostic displays.</comment>
+  </data>
+  <data name="Mp0112Title" xml:space="preserve">
+    <value>IBus.Send has incorrect argument type.</value>
+    <comment>The title of the diagnostic.</comment>
+  </data>
+  <data name="Mp0113Description" xml:space="preserve">
+    <value>IConsumer&lt;T&gt; implementation type names should have form "&lt;MessageType&gt;Handler".</value>
+    <comment>Consider using separate IConsumer&lt;T&gt; implementations instead of RequestAsync.</comment>
+  </data>
+  <data name="Mp0113MessageFormat" xml:space="preserve">
+    <value>"{0}" is poorly named, consider naming it "{1}".</value>
+    <comment>The format-able message the diagnostic displays.</comment>
+  </data>
+  <data name="Mp0113Title" xml:space="preserve">
+    <value>IConsumer&lt;T&gt; implementation type has incorrect name.</value>
+    <comment>The title of the diagnostic.</comment>
+  </data>
+  <data name="Mp0114Description" xml:space="preserve">
+    <value>Message types should be either consumed or produced.</value>
+    <comment>Consider using separate IConsumer&lt;T&gt; implementations instead of RequestAsync.</comment>
+  </data>
+  <data name="Mp0114MessageFormat" xml:space="preserve">
+    <value>{0} is neither an argument of IConsumer&lt;T&gt; nor a argument to IBus.Send or IBus.Publish.</value>
+    <comment>The format-able message the diagnostic displays.</comment>
+  </data>
+  <data name="Mp0114Title" xml:space="preserve">
+    <value>Message types should be either consumed or produced.</value>
+    <comment>The title of the diagnostic.</comment>
+  </data>
+  <data name="Mp0115Description" xml:space="preserve">
+    <value>Command handlers should publish events describing state changes.</value>
+    <comment>Consider using separate IConsumer&lt;T&gt; implementations instead of RequestAsync.</comment>
+  </data>
+  <data name="Mp0115MessageFormat" xml:space="preserve">
+    <value>{0} uses the Command Message convention to signify a state change request but does not publish events describing state changes.</value>
+    <comment>The format-able message the diagnostic displays.</comment>
+  </data>
+  <data name="Mp0115Title" xml:space="preserve">
+    <value>Command handlers should publish events describing state changes.</value>
+    <comment>The title of the diagnostic.</comment>
+  </data>
+  <data name="Mp0116Description" xml:space="preserve">
+    <value>Message handlers should propagate correlation id when producing messages.</value>
+    <comment>Consider using separate IConsumer&lt;T&gt; implementations instead of RequestAsync.</comment>
+  </data>
+  <data name="Mp0116MessageFormat" xml:space="preserve">
+    <value>{0} message handler {1} message but does not propagate correlation id.</value>
+    <comment>The format-able message the diagnostic displays.</comment>
+  </data>
+  <data name="Mp0116Title" xml:space="preserve">
+    <value>Message handlers should propagate correlation id when producing messages.</value>
+    <comment>The title of the diagnostic.</comment>
+  </data>
 </root>

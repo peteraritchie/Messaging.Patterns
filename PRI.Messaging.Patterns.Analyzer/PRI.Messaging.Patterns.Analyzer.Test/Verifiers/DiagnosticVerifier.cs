@@ -1,4 +1,5 @@
-﻿using Microsoft.CodeAnalysis;
+﻿using System;
+using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -166,6 +167,12 @@ namespace TestHelper
 					Assert.IsTrue(false,
 						string.Format("Expected diagnostic message to be \"{0}\" was \"{1}\"\r\n\r\nDiagnostic:\r\n    {2}\r\n",
 							expected.Message, actual.GetMessage(), FormatDiagnostics(analyzer, actual)));
+				}
+
+				if (expected.Category != null && expected.Category != actual.Descriptor.Category)
+				{
+					Assert.Fail(
+						$"Expected diagnostic message to be \"{expected.Category}\" was \"{actual.Descriptor.Category}\"\r\n\r\nDiagnostic:\r\n    {FormatDiagnostics(analyzer, actual)}\r\n");
 				}
 			}
 		}

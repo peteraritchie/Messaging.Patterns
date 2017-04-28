@@ -1,6 +1,8 @@
 using System;
 using System.Diagnostics;
 using System.Linq;
+using System.Reflection;
+using System.Threading;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -13,7 +15,8 @@ namespace PRI.Messaging.Patterns.Analyzer.Utility
 {
 	internal static class Utilities
 	{
-		private static string _handlerClassSuffix = "Handler";
+		public static readonly string HandlerClassSuffix = "Handler";
+		public static readonly string CommandMessageClassSuffix = "Command";
 
 		public static bool IsRequestAsync(IMethodSymbol methodSymbolInfo)
 		{
@@ -26,12 +29,11 @@ namespace PRI.Messaging.Patterns.Analyzer.Utility
 			return false;
 		}
 
-		/// TODO: move to utility class
 		public static ClassDeclarationSyntax MessageHandlerDeclaration(INamedTypeSymbol namedMessageTypeSymbol,
 			SyntaxGenerator generator, BlockSyntax handleBodyBlock, SyntaxToken handleMethodParameterName)
 		{
 			var messageTypeSyntax = namedMessageTypeSymbol.ToTypeSyntax(generator);
-			var eventHandlerDeclaration = SyntaxFactory.ClassDeclaration($"{namedMessageTypeSymbol.Name}{_handlerClassSuffix}")
+			var eventHandlerDeclaration = SyntaxFactory.ClassDeclaration($"{namedMessageTypeSymbol.Name}{HandlerClassSuffix}")
 				.WithModifiers(
 					SyntaxFactory.TokenList(
 						SyntaxFactory.Token(SyntaxKind.PublicKeyword)))
@@ -57,9 +59,6 @@ namespace PRI.Messaging.Patterns.Analyzer.Utility
 							namedMessageTypeSymbol.TypeParameters.Select(typeParameterSymbol => SyntaxFactory.TypeParameterConstraintClause(
 								SyntaxFactory.IdentifierName(typeParameterSymbol.Name),
 								SyntaxFactory.SeparatedList(typeParameterSymbol.GetTypeParameterConstraints(generator)))).ToArray());
-#if DEBUG
-				Debug.WriteLine(eventHandlerDeclaration.NormalizeWhitespace().ToString());
-#endif // DEBUG
 			}
 			eventHandlerDeclaration = eventHandlerDeclaration
 				.WithMembers(
@@ -79,9 +78,6 @@ namespace PRI.Messaging.Patterns.Analyzer.Utility
 									)))
 							.WithBody(handleBodyBlock)))
 				.WithAdditionalAnnotations(Formatter.Annotation);
-#if DEBUG
-			Debug.WriteLine(eventHandlerDeclaration.NormalizeWhitespace().ToString());
-#endif // DEBUG
 			return eventHandlerDeclaration;
 		}
 
@@ -96,6 +92,104 @@ namespace PRI.Messaging.Patterns.Analyzer.Utility
 			messageType = (INamedTypeSymbol) methodSymbolInfo.TypeArguments.ElementAt(0);
 			eventType = (INamedTypeSymbol) methodSymbolInfo.TypeArguments.ElementAt(1);
 			errorEventType = (INamedTypeSymbol) methodSymbolInfo.TypeArguments.ElementAt(2);
+		}
+
+#if false
+		private static bool IsMember(SyntaxNode[] childNodes, SemanticModel semanticModel,
+			CancellationToken cancellationToken, Func<IMethodSymbol, MethodInfo> tryGetMatchingMethodInfo)
+		{
+			var methodExpression = childNodes.ElementAt(1);
+			var methodSymbolInfo = semanticModel
+				.GetSymbolInfo(methodExpression, cancellationToken)
+				.Symbol as IMethodSymbol;
+			if (methodSymbolInfo == null)
+			{
+				return false;
+			}
+			return tryGetMatchingMethodInfo(methodSymbolInfo) != null;
+		}
+
+		public static bool IsHandle(SyntaxNode[] childNodes, SemanticModel semanticModel, CancellationToken cancellationToken)
+		{
+			return IsMember(childNodes, semanticModel, cancellationToken,
+				methodSymbolInfo => !methodSymbolInfo.IsGenericMethod && methodSymbolInfo.Arity == 0
+					? Helpers.GetHandleInvocationMethodInfo(methodSymbolInfo)
+					: null);
+		}
+
+		public static bool IsRequestAsync(SyntaxNode[] childNodes, SemanticModel semanticModel,
+			CancellationToken cancellationToken)
+		{
+			return IsMember(childNodes, semanticModel, cancellationToken,
+				methodSymbolInfo => methodSymbolInfo.IsGenericMethod && methodSymbolInfo.Arity > 1
+					? Helpers.GetRequestAsyncInvocationMethodInfo(methodSymbolInfo)
+					: null);
+		}
+
+		public static bool IsSend(SyntaxNode[] childNodes, SemanticModel semanticModel, CancellationToken cancellationToken)
+		{
+			return IsMember(childNodes, semanticModel, cancellationToken,
+				methodSymbolInfo => methodSymbolInfo.IsGenericMethod && methodSymbolInfo.Arity == 1
+					? Helpers.GetSendInvocationMethodInfo(methodSymbolInfo)
+					: null);
+		}
+
+		public static bool IsPublish(SyntaxNode[] childNodes, SemanticModel semanticModel, CancellationToken cancellationToken)
+		{
+			return IsMember(childNodes, semanticModel, cancellationToken,
+				methodSymbolInfo => methodSymbolInfo.IsGenericMethod && methodSymbolInfo.Arity == 1
+					? Helpers.GetPublishInvocationMethodInfo(methodSymbolInfo)
+					: null);
+		}
+#endif
+
+		public static bool IsMember(SimpleNameSyntax name, SemanticModel semanticModel, CancellationToken cancellationToken, Func<IMethodSymbol, MethodInfo> tryGetMatchingMethodInfo)
+		{
+			var methodSymbolInfo = semanticModel
+				.GetSymbolInfo(name, cancellationToken)
+				.Symbol as IMethodSymbol;
+			if (methodSymbolInfo == null)
+			{
+				return false;
+			}
+			return tryGetMatchingMethodInfo(methodSymbolInfo) != null;
+		}
+
+		public static bool IsMember(SimpleNameSyntax name, MethodInfo methodInfo, SemanticModel semanticModel,
+			CancellationToken cancellationToken)
+		{
+			var methodSymbolInfo = semanticModel
+				.GetSymbolInfo(name, cancellationToken)
+				.Symbol as IMethodSymbol;
+			if (methodSymbolInfo == null)
+			{
+				return false;
+			}
+			return methodSymbolInfo.IsSymbolOf(methodInfo);
+		}
+
+		public static bool IsSend(SimpleNameSyntax name, SemanticModel semanticModel, CancellationToken cancellationToken)
+		{
+			return IsMember(name, semanticModel, cancellationToken,
+				methodSymbolInfo => methodSymbolInfo.IsGenericMethod && methodSymbolInfo.Arity == 1
+					? Helpers.GetSendInvocationMethodInfo(methodSymbolInfo)
+					: null);
+		}
+
+		public static bool IsHandle(SimpleNameSyntax name, SemanticModel semanticModel, CancellationToken cancellationToken)
+		{
+			return IsMember(name, semanticModel, cancellationToken,
+				methodSymbolInfo => !methodSymbolInfo.IsGenericMethod && methodSymbolInfo.Arity == 0
+					? Helpers.GetHandleInvocationMethodInfo(methodSymbolInfo)
+					: null);
+		}
+
+		public static bool IsPublish(SimpleNameSyntax name, SemanticModel semanticModel, CancellationToken cancellationToken)
+		{
+			return IsMember(name, semanticModel, cancellationToken,
+				methodSymbolInfo => methodSymbolInfo.IsGenericMethod && methodSymbolInfo.Arity == 1
+					? Helpers.GetPublishInvocationMethodInfo(methodSymbolInfo)
+					: null);
 		}
 	}
 }

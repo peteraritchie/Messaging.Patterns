@@ -4,6 +4,8 @@ using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace PRI.Messaging.Patterns.Analyzer
 {
@@ -115,12 +117,26 @@ namespace PRI.Messaging.Patterns.Analyzer
 		}
 		#endregion CreateDiagnostics
 
-		public static bool IsSymbolOf(this IMethodSymbol methodSymbolInfo, MethodInfo mi)
+		public static bool IsSymbolOf(this IMethodSymbol methodSymbol, MethodInfo mi)
 		{
+			var reducedMethodSymbol = methodSymbol.ReducedFrom ?? methodSymbol;
+			if (mi.DeclaringType.IsConstructedGenericType)
+			{
+				return GetSymbolName(mi) ==
+				       Helpers.GetSignature(methodSymbol) &&
+				       mi.DeclaringType.AssemblyQualifiedName ==
+				       GetAssemblyQualifiedName(reducedMethodSymbol);
+			}
+			reducedMethodSymbol = (methodSymbol.ReducedFrom ?? methodSymbol).OriginalDefinition;
 			return GetSymbolName(mi) ==
-			       Helpers.GetSignature(methodSymbolInfo) &&
-			       mi.DeclaringType.AssemblyQualifiedName ==
-			       $"{methodSymbolInfo.ReducedFrom.ContainingType.ToString()}, {methodSymbolInfo.ContainingAssembly.Identity}";
+				   Helpers.GetSignature(reducedMethodSymbol) &&
+				   mi.DeclaringType.AssemblyQualifiedName ==
+				   GetAssemblyQualifiedName(reducedMethodSymbol);
+		}
+
+		private static string GetAssemblyQualifiedName(IMethodSymbol methodSymbol)
+		{
+			return $"{methodSymbol.ContainingType.ContainingNamespace}.{methodSymbol.ContainingType.MetadataName}, {methodSymbol.ContainingAssembly.Identity}";
 		}
 
 		public static string GetSymbolName(this MethodInfo mi)
@@ -137,6 +153,59 @@ namespace PRI.Messaging.Patterns.Analyzer
 			//	.Replace(
 			//		$"{mi.ReturnType} {mi.Name}[{string.Join(",", mi.GetGenericArguments().Select(p => p.Name))}]({mi.GetParameters()[0].ParameterType.FullName}, ",
 			//		$"{mi.ReturnType} {mi.GetParameters()[0].ParameterType.FullName}.{mi.Name}("));
+		}
+
+		public static ITypeSymbol GetTypeSymbol(this ISymbol symbol)
+		{
+			var localSymbol = symbol as ILocalSymbol;
+			if (localSymbol != null)
+			{
+				return localSymbol.Type;
+			}
+			var eventSymbol = symbol as IEventSymbol;
+			if (eventSymbol != null)
+			{
+				return eventSymbol.Type;
+			}
+			var fieldSymbol = symbol as IFieldSymbol;
+			if (fieldSymbol != null)
+			{
+				return fieldSymbol.Type;
+			}
+			var methodSymbol = symbol as IMethodSymbol;
+			if (methodSymbol != null)
+			{
+				return methodSymbol.ReturnType;
+			}
+			var parameterSymbol = symbol as IParameterSymbol;
+			if (parameterSymbol != null)
+			{
+				return parameterSymbol.Type;
+			}
+			var propertySymbol = symbol as IPropertySymbol;
+			if (propertySymbol != null)
+			{
+				return propertySymbol.Type;
+			}
+			return default(ITypeSymbol);
+		}
+
+		public static ISymbol GetAssignedSymbol(this AssignmentExpressionSyntax assignment, SemanticModel model)
+		{
+			if (assignment != null && assignment.Kind() == SyntaxKind.SimpleAssignmentExpression)
+			{
+				return model.GetSymbolInfo(assignment.Left).Symbol;
+			}
+			return default(ISymbol);
+		}
+
+		public static ISymbol GetAssignedValue(this AssignmentExpressionSyntax assignment, SemanticModel model)
+		{
+			if (assignment != null && assignment.Kind() == SyntaxKind.SimpleAssignmentExpression)
+			{
+				return model.GetSymbolInfo(assignment.Right).Symbol;
+			}
+			return default(ISymbol);
 		}
 	}
 }

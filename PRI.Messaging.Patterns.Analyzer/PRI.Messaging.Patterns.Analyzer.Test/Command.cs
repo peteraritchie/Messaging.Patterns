@@ -127,6 +127,7 @@ namespace TestX
 			{
 				CorrelationId = Guid.NewGuid().ToString("D")
 			};
+			command.CorrelationId = ";";
 			DateTime occurredDateTime;
 			var completedEvent = await bus.RequestAsync<Command, CommandCompletedEvent<Command>, ErrorEvent<Exception>>(command);
 			occurredDateTime = completedEvent.OccurredDateTime;

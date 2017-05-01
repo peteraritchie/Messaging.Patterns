@@ -14,6 +14,7 @@ using Microsoft.CodeAnalysis.FindSymbols;
 using PRI.Messaging.Patterns.Analyzer.Utility;
 using PRI.Messaging.Patterns.Exceptions;
 using PRI.Messaging.Patterns.Extensions.Bus;
+using PRI.Messaging.Patterns.Extensions.Consumer;
 using PRI.Messaging.Primitives;
 
 namespace PRI.Messaging.Patterns.Analyzer
@@ -22,7 +23,7 @@ namespace PRI.Messaging.Patterns.Analyzer
 	public class PRIMessagingPatternsAnalyzer : DiagnosticAnalyzer
 	{
 		#region descriptors
-#if NO_0100
+#if SUPPORT_MP0100
 		public static readonly DiagnosticDescriptor RuleMp0100 = //Call to RequestAsync not awaited
 			new DiagnosticDescriptor("MP0100",
 				GetResourceString(nameof(Resources.Mp0100Title)),
@@ -31,7 +32,7 @@ namespace PRI.Messaging.Patterns.Analyzer
 				DiagnosticSeverity.Warning,
 				isEnabledByDefault: true,
 				description: GetResourceString(nameof(Resources.Mp0100Description)));
-#endif // NO_0100
+#endif // SUPPORT_MP0100
 		public static readonly DiagnosticDescriptor RuleMp0101 = // Call to RequestAsync with error event but no try.catch.
 			new DiagnosticDescriptor("MP0101",
 				GetResourceString(nameof(Resources.Mp0101Title)),
@@ -113,6 +114,9 @@ namespace PRI.Messaging.Patterns.Analyzer
 				isEnabledByDefault: true,
 				description: GetResourceString(nameof(Resources.Mp0114Description)));
 
+		/// <summary>
+		/// Command handlers should publish events describing state changes.
+		/// </summary>
 		public static readonly DiagnosticDescriptor RuleMp0115 =
 			new DiagnosticDescriptor("MP0115",
 				GetResourceString(nameof(Resources.Mp0115Title)),
@@ -133,12 +137,12 @@ namespace PRI.Messaging.Patterns.Analyzer
 
 		public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics
 			=> ImmutableArray.Create(
-#if NO_0100
+#if SUPPORT_MP0100
 				RuleMp0100, 
 #endif
 				RuleMp0101, RuleMp0102, RuleMp0103,
 				RuleMp0104, RuleMp0110, RuleMp0111, RuleMp0112, RuleMp0113, RuleMp0114,
-				RuleMp0115);
+				RuleMp0115, RuleMp0116);
 #endregion descriptors
 
 		private static LocalizableResourceString GetResourceString(string name)
@@ -153,8 +157,12 @@ namespace PRI.Messaging.Patterns.Analyzer
 			return value ? "" : "not ";
 		}
 #endif
-		private static readonly MethodInfo PublishMethodInfo =
+		private static readonly MethodInfo BusPublishMethodInfo =
 			typeof(BusExtensions).GetRuntimeMethods().Single(e1 => e1.Name == nameof(BusExtensions.Publish));
+		private static readonly MethodInfo ConsumerPublishMethodInfo =
+			typeof(BusExtensions).GetRuntimeMethods().Single(e1 => e1.Name == nameof(ConsumerExtensions.Publish));				
+		private static readonly MethodInfo ConsumerHandleMethodInfo =
+			typeof(IConsumer<>).GetRuntimeMethods().Single(e1 => e1.Name == nameof(IConsumer<IEvent>.Handle));				
 		private static readonly MethodInfo SendMethodInfo =
 			typeof(BusExtensions).GetRuntimeMethods().Single(e1 => e1.Name == nameof(BusExtensions.Send));
 		private static readonly MethodInfo[] RequestAsyncMethodInfos =
@@ -193,7 +201,7 @@ namespace PRI.Messaging.Patterns.Analyzer
 										   e.IsTypeArgumentToMethod(semanticModel, analysisContext.CancellationToken,
 											   RequestAsyncMethodInfos) ||
 										   e.IsArgumentToMethod(semanticModel, analysisContext.CancellationToken,
-											   PublishMethodInfo) ||
+											   BusPublishMethodInfo) ||
 										   e.IsArgumentToMethod(semanticModel, analysisContext.CancellationToken,
 											   RequestAsyncMethodInfos) ||
 										   e.IsArgumentToMethod(semanticModel, analysisContext.CancellationToken,
@@ -202,7 +210,6 @@ namespace PRI.Messaging.Patterns.Analyzer
 											   SendMethodInfo);
 								}))
 							{
-								Debug.WriteLine($"Message Symbol {key} not used.");
 								analysisContext.ReportDiagnostic(typeSymbol.CreateDiagnostic(RuleMp0114, key.ToString()));
 							}
 						}
@@ -225,8 +232,7 @@ namespace PRI.Messaging.Patterns.Analyzer
 						return;
 					}
 					var suitableCandidateSymbols = info.CandidateSymbols
-						.Where(
-							e =>
+						.Where(e =>
 								(e.Kind == SymbolKind.Local || e.Kind == SymbolKind.NamedType || e.Kind != SymbolKind.Namespace) &&
 								e.OriginalDefinition != null && e.Locations[0].IsInSource)
 						.ToArray();
@@ -236,7 +242,6 @@ namespace PRI.Messaging.Patterns.Analyzer
 					}
 					symbol = suitableCandidateSymbols.First();
 				}
-				Debug.WriteLine($"==> Identifier name {analysisContext.Node.ToString()} visited, of type {symbol.OriginalDefinition.Name} ({symbol.OriginalDefinition.Kind})");
 				if (symbol?.Kind == SymbolKind.Local)
 					symbol = analysisContext.SemanticModel.GetTypeInfo(analysisContext.Node).Type;
 				if (symbol?.Kind == SymbolKind.Namespace || symbol?.OriginalDefinition == null || symbol?.OriginalDefinition?.Kind != SymbolKind.NamedType)
@@ -270,7 +275,7 @@ namespace PRI.Messaging.Patterns.Analyzer
 					return;
 				}
 				_symbolUsage.TryAdd(symbol, new List<SyntaxNode> { /*analysisContext.Node.Parent*/ });
-#if DEBUG
+#if DEBUG1
 				var declaration = analysisContext.Node as TypeDeclarationSyntax;
 				Debug.Assert(declaration != null);
 				Debug.WriteLine($"==> {declaration.Keyword} {declaration.Identifier.Text} declared using symbol {symbol.Name}");
@@ -363,8 +368,10 @@ namespace PRI.Messaging.Patterns.Analyzer
 				var methodDeclarationSyntax = analysisContext.Node as MethodDeclarationSyntax;
 				Debug.Assert(methodDeclarationSyntax != null, "methodDeclarationSyntax != null");
 
-				foreach (
-					var invocationSyntax in methodDeclarationSyntax.DescendantNodes(_ => true).OfType<InvocationExpressionSyntax>())
+				var model = analysisContext.SemanticModel;
+				foreach ( // TODO: re-use the invocation list below
+					var invocationSyntax in methodDeclarationSyntax.DescendantNodes(_ => true)
+					.OfType<InvocationExpressionSyntax>())
 				{
 					var invocationSyntaxExpression = invocationSyntax.Expression as MemberAccessExpressionSyntax;
 					if (invocationSyntaxExpression == null)
@@ -372,6 +379,7 @@ namespace PRI.Messaging.Patterns.Analyzer
 						continue;
 					}
 					var descendantExpressionNodes = invocationSyntaxExpression.DescendantNodes().ToArray();
+
 					// assumes identifier in use is the first element (IBus), and the method invoked on it
 					// is the second
 					if (descendantExpressionNodes.Length < 2)
@@ -383,8 +391,7 @@ namespace PRI.Messaging.Patterns.Analyzer
 					{
 						continue;
 					}
-					var semanticModel = analysisContext.SemanticModel;
-					var invokedIdentifierTypeInfo = semanticModel.GetTypeInfo(invokedIdentifierName, cancellationToken).Type;
+					var invokedIdentifierTypeInfo = model.GetTypeInfo(invokedIdentifierName, cancellationToken).Type;
 					if (invokedIdentifierTypeInfo == null || invokedIdentifierTypeInfo.TypeKind == TypeKind.Error)
 					{
 						continue;
@@ -395,7 +402,7 @@ namespace PRI.Messaging.Patterns.Analyzer
 					}
 
 					var methodExpression = descendantExpressionNodes.ElementAt(1);
-					var methodSymbolInfo = semanticModel.GetSymbolInfo(methodExpression, cancellationToken).Symbol as IMethodSymbol;
+					var methodSymbolInfo = model.GetSymbolInfo(methodExpression, cancellationToken).Symbol as IMethodSymbol;
 					if (methodSymbolInfo == null)
 					{
 						return;
@@ -404,22 +411,104 @@ namespace PRI.Messaging.Patterns.Analyzer
 					if (Utilities.IsRequestAsync(methodSymbolInfo))
 					{
 						if (AnalyzeRequestAsyncInvocation(analysisContext, cancellationToken, invocationSyntax, methodExpression,
-							invocationSyntaxExpression, semanticModel))
+							invocationSyntaxExpression, model))
 						{
 							return;
 						}
 					}
 				}
-				var methodSymbol = analysisContext.SemanticModel.GetDeclaredSymbol(methodDeclarationSyntax) as IMethodSymbol;
-				if (methodSymbol != null && methodSymbol.IsImplementationOf(HandleMethodInfo)
-					&& methodSymbol.ContainingType.IsCommandMessageType())
+
+				var methodSymbol = model.GetDeclaredSymbol(methodDeclarationSyntax);
+				if (methodSymbol == null || !methodSymbol.IsImplementationOf(HandleMethodInfo) ||
+				    !methodSymbol.ContainingType.IsCommandMessageType())
 				{
-					// if body does not contain BusExtensions.Publish invocation, diagnose.
-					if (!methodDeclarationSyntax.Invokes(PublishMethodInfo, analysisContext.SemanticModel, analysisContext.CancellationToken))
-					{
-						analysisContext.ReportDiagnostic(methodDeclarationSyntax.CreateDiagnostic(RuleMp0115, ((TypeDeclarationSyntax)methodDeclarationSyntax.Parent).GetIdentifier().ToString()));
-					}
 					return;
+				}
+
+				IEnumerable<ArgumentSyntax> messageArgs;
+				string sentText;
+				{
+					var invocationsInMethod = methodDeclarationSyntax.Invocations().ToArray();
+					var busPublishInvocations = invocationsInMethod
+						.Where(e => e.IsInvocationOfMethod(BusPublishMethodInfo,
+							model,
+							analysisContext.CancellationToken))
+						.ToArray();
+					var consumerPublishInvocations = invocationsInMethod
+						.Where(e =>
+							e.IsInvocationOfMethod(ConsumerPublishMethodInfo, model,
+								analysisContext.CancellationToken))
+						.ToArray();
+					var consumerHandleOfEventInvocations = invocationsInMethod
+						.Where(e =>
+							e.IsInvocationOfMethod(ConsumerHandleMethodInfo, model,
+								analysisContext.CancellationToken) && e.Parent != null
+							&& model.GetSymbolInfo(e).Symbol.ContainingType.IsGenericType
+							&& model.GetSymbolInfo(e)
+								.Symbol.ContainingType.TypeArguments.Any(t => t.ImplementsInterface<IEvent>()))
+						.ToArray();
+
+					if (!busPublishInvocations.Any()
+					    && !consumerPublishInvocations.Any()
+					    && !consumerHandleOfEventInvocations.Any())
+					{
+						analysisContext.ReportDiagnostic(methodDeclarationSyntax.CreateDiagnostic(RuleMp0115,
+							((TypeDeclarationSyntax) methodDeclarationSyntax.Parent).GetIdentifier().ToString()));
+					}
+					messageArgs = consumerHandleOfEventInvocations
+						.SelectMany(e => e.ArgumentList.Arguments)
+						.Concat(busPublishInvocations
+							.SelectMany(e => e.ArgumentList.Arguments)
+							.Concat(consumerPublishInvocations
+								.SelectMany(e => e.ArgumentList.Arguments)));
+					sentText = consumerHandleOfEventInvocations.Concat(busPublishInvocations)
+						.Concat(consumerPublishInvocations)
+						.Select(e => e.MemberName().ToString())
+						.First();
+				}
+
+				// if any of the message args do not have CorrelationId assigned from message.CorrelationId
+				// then diagnose.
+				var assignmentsInMethod = methodDeclarationSyntax
+					.Assignments()
+					.Where(e=>e.Right is MemberAccessExpressionSyntax).ToArray();
+
+				bool correlationIdCopied = false;
+				foreach (var arg in messageArgs)
+				{
+					var argSymbol = model.GetSymbolInfo((IdentifierNameSyntax) arg.Expression).Symbol;
+					ITypeSymbol argType = null;
+					if (argSymbol != null)
+					{
+						argType = argSymbol.GetTypeSymbol();
+					}
+					if (argType == null)
+					{
+						continue;
+					}
+					var members = model.LookupSymbols(0, argType);
+					var correlationIdSymbol = members.FirstOrDefault(e => e.Name == nameof(IMessage.CorrelationId));
+					if (!(from assignment
+						in assignmentsInMethod
+						where assignment.GetAssignedSymbol(model).Equals(correlationIdSymbol)
+						let memberAccessExpression = assignment.Right as MemberAccessExpressionSyntax
+						let assignedValueSymbol = assignment.GetAssignedValue(model)
+						let assignedValueObjectSymbol = model.GetSymbolInfo(memberAccessExpression.Expression).Symbol
+						where assignedValueSymbol.Name.Equals(correlationIdSymbol.Name)
+						      && assignedValueObjectSymbol.Equals(methodSymbol.Parameters[0])
+						select assignedValueSymbol).Any())
+					{
+						continue;
+					}
+					correlationIdCopied = true;
+					break;
+				}
+
+				if(!correlationIdCopied)
+				{
+					analysisContext.ReportDiagnostic(methodDeclarationSyntax.CreateDiagnostic(RuleMp0116,
+						((TypeDeclarationSyntax)methodDeclarationSyntax.Parent).GetIdentifier().ToString(),
+						SimplePluralize(sentText)));
 				}
 			}
 			catch (Exception ex)
@@ -428,11 +517,82 @@ namespace PRI.Messaging.Patterns.Analyzer
 			}
 		}
 
+		private string SimplePluralize(string text)
+		{
+			return string.Concat(text, text.EndsWith("e", StringComparison.OrdinalIgnoreCase) 
+				? "s"
+				: "es");
+		}
+
+		private static IEnumerable<T2> Traverse<T1, T2>(T1 obj, Func<T1, T1> next, Func<T1, T2> value) where T1 : class
+		{
+			while (obj != null)
+			{
+				yield return value(obj);
+				obj = next(obj);
+			}
+		}
+
+		// TODO: move GetAssignedSymbol to helper/extension
+		/// <summary>
+		/// get assignee
+		/// </summary>
+		/// <param name="assignment"></param>
+		/// <param name="model"></param>
+		private static ISymbol GetAssignedSymbolx(AssignmentExpressionSyntax assignment, SemanticModel model)
+		{
+			while (assignment != null && assignment.Kind() == SyntaxKind.SimpleAssignmentExpression)
+			{
+				if (assignment.Kind() == SyntaxKind.SimpleAssignmentExpression)
+				{
+					if (assignment.Parent is InitializerExpressionSyntax &&
+					    assignment.Parent.Kind() == SyntaxKind.ObjectInitializerExpression)
+					{
+						var oce = assignment.Parent.Parent as ObjectCreationExpressionSyntax;
+						return GetAssignedSymbol(oce, model);
+					}
+
+					var mae = assignment.Left as MemberAccessExpressionSyntax;
+					if (mae != null && mae.Kind() == SyntaxKind.SimpleMemberAccessExpression)
+					{
+						var identifierName = mae.Expression as IdentifierNameSyntax;
+						return model.GetSymbolInfo(identifierName).Symbol;
+					}
+				}
+
+				assignment = assignment.Parent as AssignmentExpressionSyntax;
+			}
+			return default(ISymbol);
+		}
+
+		// TODO: move GetAssignedSymbol to helper/extension
+		private static ISymbol GetAssignedSymbol(ObjectCreationExpressionSyntax objectCreationExpression, SemanticModel model)
+		{
+			var evc = objectCreationExpression?.Parent as EqualsValueClauseSyntax;
+			if (evc != null)
+			{
+				var vd = (VariableDeclaratorSyntax) evc.Parent;
+				if (vd != null)
+				{
+					return model.GetDeclaredSymbol(vd);
+				}
+			}
+			else
+			{
+				var ae = objectCreationExpression?.Parent as AssignmentExpressionSyntax;
+				if (ae != null)
+				{
+					return model.GetSymbolInfo(ae.Left).Symbol;
+				}
+			}
+			return default(ISymbol);
+		}
+
 		private static bool AnalyzeRequestAsyncInvocation(SyntaxNodeAnalysisContext analysisContext,
 			CancellationToken cancellationToken, InvocationExpressionSyntax invocationSyntax, SyntaxNode methodExpression,
 			MemberAccessExpressionSyntax invocationSyntaxExpression, SemanticModel semanticModel)
 		{
-#if NO_0100
+#if SUPPORT_MP0100
 			if (!(invocationSyntax.Parent is AwaitExpressionSyntax))
 			{
 				// if assigning to variable
@@ -557,6 +717,7 @@ namespace PRI.Messaging.Patterns.Analyzer
 				_context = context;
 			}
 
+#if false
 			public override void VisitMethodDeclaration(MethodDeclarationSyntax node)
 			{
 				var methodSymbol = _semanticModel.GetDeclaredSymbol(node);
@@ -577,6 +738,7 @@ namespace PRI.Messaging.Patterns.Analyzer
 			{
 				return e.IsInvocationOfPublish(_semanticModel, _context.CancellationToken) || e.IsInvocationOfHandle(_semanticModel, _context.CancellationToken) || e.IsInvocationOfSend(_semanticModel, _context.CancellationToken);
 			}
+#endif
 
 			public override void VisitInvocationExpression(InvocationExpressionSyntax node)
 			{

@@ -227,7 +227,7 @@ namespace PRI.Messaging.Patterns.Analyzer.Test
 		}
 
 		[TestMethod]
-		public void HandlerWithSendCopyCorrelationIdDiagnostic()
+		public void IProducerWithCopyCorrelationIdNoDiagnostic()
 		{
 			#region test-code
 
@@ -250,14 +250,63 @@ namespace Test
         public string CorrelationId { get; set; }
         public DateTime OccurredDateTime { get; set; }
     }
-    public class CommaHandler : IConsumer<Command>, IProducer<Event>
+    public class CommandHandler : IConsumer<Command>, IProducer<Event>
     {
+        private IConsumer<Event> _consumer;
         public void Handle(Command command)
         {
             var consumer = _consumer;
-            var msg = new Event {CorrelationId = errorEvent.CorrelationId};
-            new Bus().Send(msg);
-            consumer?.Handle(msg);
+            if(consumer == null) throw new InvalidOperationException();
+            Event msg;
+            msg = new Event {CorrelationId = command.CorrelationId};
+            consumer.Handle(msg); // TODO: Test with conditional 
+        }
+
+        public void AttachConsumer(IConsumer<Event> consumer)
+        {
+            _consumer = consumer;
+        }
+    }
+}";
+			#endregion test-code
+
+			VerifyCSharpDiagnostic(source);
+		}
+
+		[TestMethod]
+		public void IProducerWithoutCopyCorrelationIdDiagnostic()
+		{
+			#region test-code
+
+			var source = @"using System;
+using PRI.Messaging.Patterns;
+using PRI.Messaging.Patterns.Exceptions;
+using PRI.Messaging.Patterns.Extensions.Bus;
+using PRI.Messaging.Primitives;
+using System.Diagnostics;
+using System.Threading.Tasks;
+
+namespace Test
+{
+    public class Command : IMessage
+    {
+        public string CorrelationId { get; set; }
+    }
+    public class Event : IEvent
+    {
+        public string CorrelationId { get; set; }
+        public DateTime OccurredDateTime { get; set; }
+    }
+    public class CommandHandler : IConsumer<Command>, IProducer<Event>
+    {
+        private IConsumer<Event> _consumer;
+        public void Handle(Command command)
+        {
+            var consumer = _consumer;
+            if(consumer == null) throw new InvalidOperationException();
+            Event msg;
+            msg = new Event();
+            consumer.Handle(msg); // TODO: Test with conditional 
         }
 
         public void AttachConsumer(IConsumer<Event> consumer)
@@ -270,12 +319,12 @@ namespace Test
 			var expected = new DiagnosticResult
 			{
 				Id = "MP0116",
-				Message = "Test.CommandHandler does not propagate correlation id.",
+				Message = "CommandHandler message handler Handles message but does not propagate correlation id.",
 				Severity = DiagnosticSeverity.Warning,
 				Locations =
 					new[]
 					{
-						new DiagnosticResultLocation("Test0.cs", line: 11, column: 18)
+						new DiagnosticResultLocation("Test0.cs", line: 23, column: 9)
 					}
 			};
 
@@ -733,7 +782,7 @@ namespace Test
 			VerifyCSharpDiagnostic(source);
 		}
 
-#if NO_0100
+#if SUPPORT_MP0100
 		[TestMethod]
 		public void AwaitRecommendationWithMethodNotReturningTask()
 		{

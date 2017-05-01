@@ -416,31 +416,6 @@ namespace PRI.Messaging.Patterns.Analyzer
 			}
 		}
 
-#if NO_0100
-		/// <summary>
-		/// Create a new MethodDeclaration that returns Task or Task{T} and has async modifier.
-		/// </summary>
-		/// <param name="originalMethod"></param>
-		/// <param name="method"></param>
-		/// <param name="model"></param>
-		/// <returns></returns>
-		public static MethodDeclarationSyntax WithAsync(this MethodDeclarationSyntax originalMethod, MethodDeclarationSyntax method, SemanticModel model)
-		{
-			if (!originalMethod.ReturnType.ToDisplayString(model).StartsWith($"{typeof(Task)}", StringComparison.Ordinal))
-			{
-				var returnType = method.ReturnType.ToString();
-				method = method.
-					WithReturnType(SyntaxFactory.ParseTypeName(
-							returnType == "void" ? "Task" : $"Task<{returnType}>")
-						.WithTrailingTrivia(originalMethod.ReturnType.GetTrailingTrivia())
-					);
-			}
-			return method
-				.WithModifiers(method.Modifiers.Add(SyntaxFactory.Token(SyntaxKind.AsyncKeyword)))
-				.WithAdditionalAnnotations(Formatter.Annotation);
-		}
-#endif
-
 		public static MethodDeclarationSyntax WithoutAsync(this MethodDeclarationSyntax method)
 		{
 			var genericName = method.ReturnType as GenericNameSyntax;
@@ -552,16 +527,30 @@ namespace PRI.Messaging.Patterns.Analyzer
 			       methodSymbol.Parameters.Length == methodInfo.GetParameters().Length && methodSymbol.Name == methodInfo.Name;
 		}
 
-		public static bool Invokes(this MethodDeclarationSyntax methodDeclaration, MethodInfo methodInfo,
-			SemanticModel semanticModel, CancellationToken cancellationToken)
+		public static IEnumerable<AssignmentExpressionSyntax> Assignments(this MethodDeclarationSyntax methodDeclaration)
+		{
+			return methodDeclaration
+				.Body
+				.DescendantNodes()
+				.OfType<AssignmentExpressionSyntax>();
+;
+		}
+
+		public static IEnumerable<InvocationExpressionSyntax> Invocations(this MethodDeclarationSyntax methodDeclaration)
 		{
 			return methodDeclaration
 				.Body
 				.Statements
 				.OfType<ExpressionStatementSyntax>()
-				.Any(e => e.Expression.Kind() == SyntaxKind.InvocationExpression &&
-				          ((InvocationExpressionSyntax) e.Expression).IsInvocationOfMethod(methodInfo, semanticModel,
-					          cancellationToken));
+				.Where(e => e.Expression.Kind() == SyntaxKind.InvocationExpression)
+				.Select(e => (InvocationExpressionSyntax) e.Expression);
+		}
+
+		public static bool Invokes(this MethodDeclarationSyntax methodDeclaration, MethodInfo methodInfo,
+			SemanticModel semanticModel, CancellationToken cancellationToken)
+		{
+			return methodDeclaration.Invocations()
+				.Any(e => e.IsInvocationOfMethod(methodInfo, semanticModel, cancellationToken));
 		}
 
 		public static bool IsCommandMessageType(this INamedTypeSymbol symbol)
@@ -569,20 +558,26 @@ namespace PRI.Messaging.Patterns.Analyzer
 			return symbol != null && symbol.Name.StartsWith(Utilities.CommandMessageClassSuffix, StringComparison.Ordinal);
 		}
 
-		private static bool IsInvocationImpl(InvocationExpressionSyntax node, SemanticModel semanticModel,
-			Func<SimpleNameSyntax, SemanticModel, CancellationToken, bool> predicate, CancellationToken cancellationToken)
+		public static SimpleNameSyntax MemberName(this InvocationExpressionSyntax node)
 		{
 			var memberAccessExpression = node.Expression as MemberAccessExpressionSyntax;
 			if (memberAccessExpression != null)
 			{
-				return predicate(memberAccessExpression.Name, semanticModel, cancellationToken);
+				return memberAccessExpression.Name;
 			}
 			var memberBindingExpression = node.Expression as MemberBindingExpressionSyntax;
 			if (memberBindingExpression != null)
 			{
-				return predicate(memberBindingExpression.Name, semanticModel, cancellationToken);
+				return memberBindingExpression.Name;
 			}
-			return false;
+			return default(SimpleNameSyntax);
+		}
+
+		private static bool IsInvocationImpl(InvocationExpressionSyntax node, SemanticModel semanticModel,
+			Func<SimpleNameSyntax, SemanticModel, CancellationToken, bool> predicate, CancellationToken cancellationToken)
+		{
+			var name = MemberName(node);
+			return name != null && predicate(name, semanticModel, cancellationToken);
 		}
 
 		public static bool IsInvocationOfMethod(this InvocationExpressionSyntax invocationExpression,
@@ -653,20 +648,6 @@ namespace PRI.Messaging.Patterns.Analyzer
 			return newDocument;
 		}
 
-		public static bool ImplementsInterface<TInterface>(this TypeDeclarationSyntax typeDeclaration,
-			SemanticModel model)
-		{
-			var type = typeof(TInterface);
-			if (!type.GetTypeInfo().IsInterface)
-			{
-				throw new ArgumentException("Type is not an interface", nameof(TInterface));
-			}
-			return typeDeclaration?.BaseList != null &&
-			       typeDeclaration.BaseList.Types.Select(baseType => model.GetTypeInfo(baseType.Type))
-				       .Any(typeInfo => typeInfo.Type.IsOfType<TInterface>()
-				                        || typeInfo.Type.ImplementsInterface<TInterface>());
-		}
-
 		public static bool ImplementsInterface(this ITypeSymbol typeSymbol, Type type)
 		{
 			if (!type.GetTypeInfo().IsInterface)
@@ -705,5 +686,35 @@ namespace PRI.Messaging.Patterns.Analyzer
 			return typeSymbol.ToString() == type.FullName &&
 			       $"{typeSymbol}, {typeSymbol.ContainingAssembly.Identity}" == type.AssemblyQualifiedName;
 		}
+
+#if SUPPORT_MP0100
+		/// <summary>
+		/// Create a new MethodDeclaration that returns Task or Task{T} and has async modifier.
+		/// </summary>
+		/// <param name="originalMethod"></param>
+		/// <param name="method"></param>
+		/// <param name="model"></param>
+		/// <returns></returns>
+		public static MethodDeclarationSyntax WithAsync(this MethodDeclarationSyntax originalMethod, MethodDeclarationSyntax method, SemanticModel model)
+		{
+			if (!originalMethod.ReturnType.ToDisplayString(model).StartsWith($"{typeof(Task)}", StringComparison.Ordinal))
+			{
+				var returnType = method.ReturnType.ToString();
+				method = method.
+					WithReturnType(SyntaxFactory.ParseTypeName(
+							returnType == "void" ? "Task" : $"Task<{returnType}>")
+						.WithTrailingTrivia(originalMethod.ReturnType.GetTrailingTrivia())
+					);
+			}
+			return method
+				.WithModifiers(method.Modifiers.Add(SyntaxFactory.Token(SyntaxKind.AsyncKeyword)))
+				.WithAdditionalAnnotations(Formatter.Annotation);
+		}
+
+		public static MethodDeclarationSyntax GetContainingMethodDeclaration(SyntaxNode invocation)
+		{
+			return invocation.Ancestors().OfType<MethodDeclarationSyntax>().FirstOrDefault();
+		}
+#endif
 	}
 }

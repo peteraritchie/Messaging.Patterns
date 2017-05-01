@@ -21,7 +21,7 @@ static internal class CodeAnalysisUtilities
 							ArgumentList()))));
 	}
 
-#if NO_0100
+#if SUPPORT_MP0100
 	/// <summary>
 	/// Replace invocation expression with awaited invocation.
 	/// </summary>

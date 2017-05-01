@@ -72,8 +72,8 @@
       <HintPath>..\..\packages\CommonServiceLocator.1.3\lib\portable-net4+sl5+netcore45+wpa81+wp8\Microsoft.Practices.ServiceLocation.dll</HintPath>
       <Private>True</Private>
     </Reference>
-    <Reference Include="PRI.Messaging.Patterns, Version=1.1.50.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\..\packages\PRI.Messaging.Patterns.1.1.50\lib\net45\PRI.Messaging.Patterns.dll</HintPath>
+    <Reference Include="PRI.Messaging.Patterns, Version=1.1.51.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\..\packages\PRI.Messaging.Patterns.1.1.51\lib\net45\PRI.Messaging.Patterns.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="PRI.Messaging.Primitives, Version=1.0.12.0, Culture=neutral, processorArchitecture=MSIL">
@@ -132,7 +132,9 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="packages.config" />
+    <None Include="packages.config">
+      <SubType>Designer</SubType>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\PRI.Messaging.Patterns.Analyzer\PRI.Messaging.Patterns.Analyzer.csproj">

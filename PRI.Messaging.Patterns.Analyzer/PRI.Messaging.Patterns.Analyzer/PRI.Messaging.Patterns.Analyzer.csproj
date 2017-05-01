@@ -23,7 +23,7 @@
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
     <OutputPath>bin\Debug\</OutputPath>
-    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <DefineConstants>TRACE;DEBUG;SUPPORT_MP0100</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
     <CodeAnalysisRuleSet>PRI.Messaging.Patterns.Analyzer.ruleset</CodeAnalysisRuleSet>
@@ -100,7 +100,7 @@
       <Private>False</Private>
     </Reference>
     <Reference Include="PRI.Messaging.Patterns">
-      <HintPath>..\..\packages\PRI.Messaging.Patterns.1.1.50\lib\net45\PRI.Messaging.Patterns.dll</HintPath>
+      <HintPath>..\..\packages\PRI.Messaging.Patterns.1.1.51\lib\net45\PRI.Messaging.Patterns.dll</HintPath>
     </Reference>
     <Reference Include="PRI.Messaging.Primitives">
       <HintPath>..\..\packages\PRI.Messaging.Primitives.1.0.12\lib\net40\PRI.Messaging.Primitives.dll</HintPath>

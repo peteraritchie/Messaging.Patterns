@@ -28,7 +28,7 @@ namespace PRI.Messaging.Patterns.Analyzer
 	{
 		public sealed override ImmutableArray<string> FixableDiagnosticIds
 			=> ImmutableArray.Create(
-#if NO_0100
+#if SUPPORT_MP0100
 				PRIMessagingPatternsAnalyzer.RuleMp0100.Id,
 #endif
 				PRIMessagingPatternsAnalyzer.RuleMp0101.Id,
@@ -40,7 +40,7 @@ namespace PRI.Messaging.Patterns.Analyzer
 		private readonly Dictionary<string, KeyValuePair<string, Func<Diagnostic, Document, CancellationToken, Task<Document>>>> _documentDiagnosticInvocations
 			= new Dictionary<string, KeyValuePair<string, Func<Diagnostic, Document, CancellationToken, Task<Document>>>>
 			{
-#if NO_0100
+#if SUPPORT_MP0100
 				{"MP0100", new KeyValuePair<string, Func<Diagnostic, Document, CancellationToken, Task<Document>>>("bleah", InvokeMp0100)},
 #endif
 				{"MP0101", new KeyValuePair<string, Func<Diagnostic, Document, CancellationToken, Task<Document>>>("bleah", InvokeMp0101)},
@@ -459,7 +459,7 @@ namespace PRI.Messaging.Patterns.Analyzer
 					model), document.Project.Solution.Workspace, document.Project.Solution.Workspace.Options));
 		}
 
-#if NO_0100
+#if SUPPORT_MP0100
 		private static async Task<Document> InvokeMp0100(Diagnostic diagnostic, Document document, CancellationToken cancellationToken)
 		{
 			var diagnosticSpan = diagnostic.Location.SourceSpan;

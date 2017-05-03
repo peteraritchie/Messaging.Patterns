@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using PRI.Messaging.Primitives;
 
@@ -14,6 +15,7 @@ namespace PRI.Messaging.Patterns.Exceptions
 		}
 	}
 
+	[ExcludeFromCodeCoverage/*unable to reproduce this exception in a unit test*/]
 	public class UnexpectedDuplicateKeyException : Exception
 	{
 		public UnexpectedDuplicateKeyException(ArgumentException argumentException, string key, IEnumerable<string> keys, string context = "<unknown>")

@@ -1,4 +1,4 @@
-﻿#if true
+﻿#if DIAGNOSTIC_DEBUGGING
 using System;
 using System.Diagnostics;
 using System.Threading.Tasks;
@@ -77,12 +77,12 @@ namespace TestX
 		public DateTime OccurredDateTime { get; set; }
 	}
 
-	// get name of event
-	// get constraints, if event generic and has constraints
-	// create class with name of event with "Handler" prepended to the name, or inserted between name and type parameters
-	// implement Handle method
-	// copy catch(ReceivedErrorEventException... body to Handle
-	// replace reference to ReceivedErrorEventException.ErrorEvent with argument identifier
+	/// get name of event
+	/// get constraints, if event generic and has constraints
+	/// create class with name of event with "Handler" prepended to the name, or inserted between name and type parameters
+	/// implement Handle method
+	/// copy catch(ReceivedErrorEventException... body to Handle
+	/// replace reference to ReceivedErrorEventException.ErrorEvent with argument identifier
 	public class ErrorEventHandler<TException> : IConsumer<ErrorEvent<TException>> where TException : Exception
 	{
 		public void Handle(ErrorEvent<TException> errorEvent)

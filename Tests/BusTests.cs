@@ -10,6 +10,8 @@ using PRI.Messaging.Patterns.Extensions.Bus;
 using PRI.Messaging.Primitives;
 using Tests.Mocks;
 
+#pragma warning disable S1104 // Fields should not have public accessibility
+#pragma warning disable S1481 // Unused local variables should be removed
 namespace Tests
 {
 	[TestFixture]
@@ -18,12 +20,16 @@ namespace Tests
 		[Test]
 		public void BusConsumesMessagesCorrectly()
 		{
-			var bus = new Bus();
-			Message1 receivedMessage = null;
-			bus.AddHandler(new ActionConsumer<Message1>(m=>receivedMessage = m));
+			Message1 receivedMessage;
+			Message1 message1;
+			using (var bus = new Bus())
+			{
+				receivedMessage = null;
+				bus.AddHandler(new ActionConsumer<Message1>(m=>receivedMessage = m));
 
-			var message1 = new Message1 { CorrelationId = "1234" };
-			bus.Handle(message1);
+				message1 = new Message1 {CorrelationId = "1234"};
+				bus.Handle(message1);
+			}
 
 			Assert.AreSame(message1, receivedMessage);
 			Assert.IsNotNull(receivedMessage);
@@ -41,6 +47,7 @@ namespace Tests
 		}
 #endif // PARANOID
 
+#if SUPPORT_ASYNC_CONSUMER
 		[Test]
 		public void MultipleAsyncHandlersOfSameMessageDoesntThrow()
 		{
@@ -50,7 +57,7 @@ namespace Tests
 				bus.AddHandler(new AsyncActionConsumer<Message1>(m => Task.FromResult(1)));
 			}
 		}
-
+#endif
 		public class TheEvent : IEvent
 		{
 			public TheEvent()
@@ -129,14 +136,6 @@ namespace Tests
 			var message1 = new Message1SpecializationSpecialization() { CorrelationId = "1234" };
 			bus.Handle(message1);
 			Assert.AreSame(message1, receivedMessage1);
-		}
-
-		[Test]
-		public void RemoveUnsubscribedHandlerDoesNotThrow()
-		{
-			var bus = new Bus();
-			Message1 receivedMessage1 = null;
-			bus.RemoveHandler(new ActionConsumer<Message1>(m => receivedMessage1 = m));
 		}
 
 		[Test]
@@ -263,7 +262,6 @@ namespace Tests
 				if (@event != null)
 				{
 					LogEvent(@event);
-					//Console.WriteLine($"{@event.GetType().Name} occured at {@event.OccurredDateTime.ToLocalTime()}");
 				}
 				bool wasProcessed;
 				var stopwatch = Stopwatch.StartNew();
@@ -372,7 +370,9 @@ namespace Tests
 #endif
 			var stopwatch = Stopwatch.StartNew();
 			while (stopwatch.Elapsed.TotalMinutes < 2)
+#pragma warning disable RECS0165 // Asynchronous methods should return a Task instead of void: TESTS
 				Parallel.ForEach(commands, new ParallelOptions {MaxDegreeOfParallelism = commands.Count}, async command =>
+#pragma warning restore RECS0165 // Asynchronous methods should return a Task instead of void: TESTS
 				{
 					command.CorrelationId = Guid.NewGuid().ToString("D");
 					var result = await command.RequestAsync(bus);
@@ -383,3 +383,5 @@ namespace Tests
 		}
 	}
 }
+#pragma warning restore S1481 // Unused local variables should be removed
+#pragma warning restore S1104 // Fields should not have public accessibility

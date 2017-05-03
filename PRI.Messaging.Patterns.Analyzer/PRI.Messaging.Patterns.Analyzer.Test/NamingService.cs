@@ -1,3 +1,4 @@
+#if SUPPORT_NAMING_SERVICE
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -801,3 +802,4 @@ namespace StyleCop.Spelling
 		}
 	}
 }
+#endif

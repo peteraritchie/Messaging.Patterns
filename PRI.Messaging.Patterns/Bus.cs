@@ -1,18 +1,18 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
-#if DEBUG
-using System.Diagnostics;
-#endif
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
+#if SUPPORT_ASYNC_CONSUMER
 using System.Threading.Tasks;
+#endif
 using PRI.Messaging.Patterns.Exceptions;
 using PRI.Messaging.Primitives;
 using TokenType= System.Tuple<System.Guid, System.Action<PRI.Messaging.Primitives.IMessage>, System.Func<PRI.Messaging.Primitives.IMessage, System.Threading.Tasks.Task>>;
+using PRI.ProductivityExtensions.ActionExtensions;
 
-[assembly:InternalsVisibleTo("Tests")]
+[assembly: InternalsVisibleTo("Tests")]
+
 namespace PRI.Messaging.Patterns
 {
 	/// <summary>
@@ -40,15 +40,14 @@ namespace PRI.Messaging.Patterns
 	{
 		internal readonly Dictionary<string, Action<IMessage>> _consumerInvokers = new Dictionary<string, Action<IMessage>>();
 		internal readonly Dictionary<string, Dictionary<Guid, Action<IMessage>>> _consumerInvokersDictionaries = new Dictionary<string, Dictionary<Guid, Action<IMessage>>>();
+#if SUPPORT_ASYNC_CONSUMER
 		// TODO: add more tests
 		internal readonly Dictionary<string, Func<IMessage, Task>> _asyncConsumerInvokers = new Dictionary<string, Func<IMessage, Task>>();
 		internal readonly Dictionary<string, Dictionary<Guid, Func<IMessage, Task>>> _asyncConsumerInvokersDictionaries = new Dictionary<string, Dictionary<Guid, Func<IMessage, Task>>>();
+#endif
 #if in_progress
 		internal readonly Dictionary<IMessage, Dictionary<string, string>> _outgoingMessageHeaders = new Dictionary<IMessage, Dictionary<string, string>>();
 #endif
-
-		[Obsolete("Event seems unreliable when multi-threaded; use new overload Handle(IMessage, out wasProcessed)")]
-		protected EventHandler<MessageProcessedEventArgs> MessageProcessed;
 
 		private ReaderWriterLockSlim _readerWriterConsumersLock = new ReaderWriterLockSlim();
 		private ReaderWriterLockSlim _readerWriterAsyncConsumersLock = new ReaderWriterLockSlim();
@@ -58,7 +57,6 @@ namespace PRI.Messaging.Patterns
 
 		protected virtual void Handle(IMessage message, out bool wasProcessed)
 		{
-			var messageProcessedHandler = MessageProcessed;
 			var isEvent = message is IEvent;
 			var messageType = message.GetType();
 			Action<IMessage> consumerInvoker;
@@ -81,7 +79,6 @@ namespace PRI.Messaging.Patterns
 #endif // PARANOID
 				consumerInvoker(message);
 				wasProcessed = true;
-				messageProcessedHandler?.Invoke(this, new MessageProcessedEventArgs(message));
 				if (!isEvent)
 					return;
 			}
@@ -102,7 +99,7 @@ namespace PRI.Messaging.Patterns
 				if (consumerExists)
 				{
 					consumerInvoker(message);
-					messageProcessedHandler?.Invoke(this, new MessageProcessedEventArgs(message));
+					wasProcessed = true;
 					if (!isEvent)
 						return;
 				}
@@ -125,7 +122,7 @@ namespace PRI.Messaging.Patterns
 				if (!consumerExists) continue;
 
 				consumerInvoker(message);
-				messageProcessedHandler?.Invoke(this, new MessageProcessedEventArgs(message));
+				wasProcessed = true;
 				if (!isEvent)
 					return;
 			}
@@ -166,10 +163,12 @@ namespace PRI.Messaging.Patterns
 			}
 		}
 
+#if SUPPORT_ASYNC_CONSUMER
 		private Func<IMessage, Task> CreateAsyncConsumerDelegate<TIn>(IAsyncConsumer<TIn> asyncConsumer) where TIn : IMessage
 		{
 			return async o => await asyncConsumer.HandleAsync((TIn)o).ConfigureAwait(false);
 		}
+#endif
 
 		private Action<IMessage> CreateConsumerDelegate<TIn>(IConsumer<TIn> consumer) where TIn : IMessage
 		{
@@ -178,12 +177,14 @@ namespace PRI.Messaging.Patterns
 
 		public object AddHandler<TIn>(IConsumer<TIn> consumer) where TIn : IMessage
 		{
-			var asyncConsumer = consumer as IAsyncConsumer<TIn>;
 			Action<IMessage> handler = CreateConsumerDelegate(consumer);
 			var typeGuid = typeof(TIn).AssemblyQualifiedName ?? typeof(TIn).GUID.ToString();
 			var delegateGuid = Guid.NewGuid();
+#if SUPPORT_ASYNC_CONSUMER
+			var asyncConsumer = consumer as IAsyncConsumer<TIn>;
 			if (asyncConsumer == null)
 			{
+#endif
 				_readerWriterConsumersLock.EnterWriteLock();
 
 				try
@@ -219,6 +220,7 @@ namespace PRI.Messaging.Patterns
 					_readerWriterConsumersLock.ExitWriteLock();
 				}
 				return new TokenType(delegateGuid, handler, null);
+#if SUPPORT_ASYNC_CONSUMER
 			}
 			var asyncHandler = CreateAsyncConsumerDelegate(asyncConsumer);
 			_readerWriterAsyncConsumersLock.EnterWriteLock();
@@ -261,7 +263,9 @@ namespace PRI.Messaging.Patterns
 				_readerWriterConsumersLock.ExitWriteLock();
 
 			}
+
 			return new TokenType(delegateGuid, handler, asyncHandler);
+#endif
 		}
 
 #if PARANOID
@@ -321,51 +325,6 @@ namespace PRI.Messaging.Patterns
 			RemoveHandler(consumer, tag, nocheck: false);
 		}
 #endif
-		[Obsolete, ExcludeFromCodeCoverage]
-		public void RemoveHandler<TIn>(IConsumer<TIn> consumer) where TIn : IMessage
-		{
-			_readerWriterConsumersLock.EnterUpgradeableReadLock();
-			try
-			{
-				var typeGuid = typeof(TIn).AssemblyQualifiedName ?? typeof(TIn).GUID.ToString();
-				var hasConsumerType = _consumerInvokers.ContainsKey(typeGuid);
-				if (!hasConsumerType)
-					return;
-
-				_readerWriterConsumersLock.EnterWriteLock(); //TODO: optimize, make more granular below?
-				try
-				{
-					var list = _consumerInvokers[typeGuid].GetInvocationList();
-#if DEBUG
-					var initialCount = list.Length;
-#endif
-					Action<IMessage> handler = CreateConsumerDelegate(consumer);
-					Delegate m =
-						list.LastOrDefault(e => e.Method.Name == handler.Method.Name && e.Target.GetType() == handler.Target.GetType());
-					if (m != null)
-						_consumerInvokers[typeGuid] -= (Action<IMessage>) m;
-					if (!_consumerInvokers.ContainsKey(typeGuid))
-						return;
-					if (_consumerInvokers[typeGuid] != null)
-					{
-						list = _consumerInvokers[typeGuid].GetInvocationList();
-#if DEBUG
-						Debug.Assert(initialCount != list.Length);
-#endif
-					}
-					else
-						_consumerInvokers.Remove(typeGuid);
-				}
-				finally
-				{
-					_readerWriterConsumersLock.ExitWriteLock();
-				}
-			}
-			finally
-			{
-				_readerWriterConsumersLock.ExitUpgradeableReadLock();
-			}
-		}
 
 #if in_progress
 		ThreadLocal<Dictionary<string,string>> currentMessageDictionary = new ThreadLocal<Dictionary<string, string>>();
@@ -387,6 +346,7 @@ namespace PRI.Messaging.Patterns
 		}
 #endif // in_progress
 
+#if SUPPORT_ASYNC_CONSUMER
 		public Task HandleAsync(IMessage message)
 		{
 			bool wasProcessed;
@@ -395,7 +355,6 @@ namespace PRI.Messaging.Patterns
 
 		public Task HandleAsync(IMessage message, out bool wasProcessed)
 		{
-			var messageProcessedHandler = MessageProcessed;
 			var isEvent = message is IEvent;
 			var messageType = message.GetType();
 			Func<IMessage, Task> consumerInvoker;
@@ -420,7 +379,6 @@ namespace PRI.Messaging.Patterns
 #endif // PARANOID
 				task = consumerInvoker(message);
 				wasProcessed = true;
-				messageProcessedHandler?.Invoke(this, new MessageProcessedEventArgs(message));
 				if (!isEvent)
 					return task;
 			}
@@ -445,7 +403,6 @@ namespace PRI.Messaging.Patterns
 #endif // PARANOID
 					var newTask = consumerInvoker(message);
 					wasProcessed = true;
-					messageProcessedHandler?.Invoke(this, new MessageProcessedEventArgs(message));
 					// merge tasks, if needed
 					task = task != null ? Task.WhenAll(task, newTask) : newTask;
 					if (!isEvent)
@@ -477,7 +434,6 @@ namespace PRI.Messaging.Patterns
 #endif // PARANOID
 				var newTask = consumerInvoker(message);
 				wasProcessed = true;
-				messageProcessedHandler?.Invoke(this, new MessageProcessedEventArgs(message));
 				// merge tasks if needed
 				task = task != null ? Task.WhenAll(task, newTask) : newTask;
 				if (!isEvent)
@@ -489,17 +445,12 @@ namespace PRI.Messaging.Patterns
 			Handle(message); // if no async handlers, handle synchronously
 			return Task.FromResult(true); // TODO: Replace with Task.CompletedTask in .NET 4.6+
 		}
+#endif //SUPPORT_ASYNC_CONSUMER
 
-		public void Dispose()
+		public virtual void Dispose()
 		{
-			using (_readerWriterConsumersLock)
-			{
-				_readerWriterConsumersLock = null;
-			}
-			using (_readerWriterAsyncConsumersLock)
-			{
-				_readerWriterAsyncConsumersLock = null;
-			}
+			_readerWriterConsumersLock.Dispose();
+			_readerWriterAsyncConsumersLock.Dispose();
 		}
 	}
 }

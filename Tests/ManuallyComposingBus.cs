@@ -4,6 +4,9 @@ using PRI.Messaging.Patterns;
 using PRI.Messaging.Primitives;
 using Tests.Mocks;
 
+#pragma warning disable S1481 // Unused local variables should be removed
+#pragma warning disable S1186 // Methods should not be empty: TESTS
+#pragma warning disable S3010 // Static fields should not be updated in constructors
 namespace Tests
 {
 	// docs on:
@@ -39,6 +42,7 @@ namespace Tests
 			Assert.AreEqual(message1.CorrelationId, Message2Consumer.LastMessageReceived.CorrelationId);
 		}
 
+#if SUPPORT_ASYNC_CONSUMER
 		[Test]
 		public void ManuallyComposedSyncAsyncTypeSynchronouslyHandlesMessageWithAsyncConsumerProperly()
 		{
@@ -58,7 +62,6 @@ namespace Tests
 			Assert.IsNotNull(Message3AsyncConsumer.LastMessageReceived);
 			Assert.AreEqual(message2.CorrelationId, Message3AsyncConsumer.LastMessageReceived.CorrelationId);
 		}
-
 
 		[Test]
 		public async Task ManuallyComposedSyncAsyncTypeAsynchronouslyHandlesMessageProperly()
@@ -95,6 +98,7 @@ namespace Tests
 			Assert.IsNotNull(Message3AsyncConsumer.LastMessageReceived);
 			Assert.AreEqual(message3.CorrelationId, Message3AsyncConsumer.LastMessageReceived.CorrelationId);
 		}
+#endif
 
 		[Test]
 		public void ManuallyComposedWithTranslatorFirstTypeHandlesMessageProperly()
@@ -206,14 +210,8 @@ namespace Tests
 			Assert.AreEqual(1, message2Consumer.MessageReceivedCount);
 		}
 #endif
-		[Test]
-		public void RemoveHandlerWithUnknownHandlerDoesNotFail()
-		{
-			var bus = new Bus();
-
-			var message2Consumer = new Message2Consumer();
-			bus.AddHandler(message2Consumer);
-			bus.RemoveHandler(new ActionConsumer<Message1>(_ => { }));
-		}
 	}
 }
+#pragma warning restore S1186 // Methods should not be empty: TESTS
+#pragma warning restore S3010 // Static fields should not be updated in constructors
+#pragma warning restore S1481 // Unused local variables should be removed

@@ -7,6 +7,7 @@ using PRI.Messaging.Patterns.Extensions.Bus;
 using PRI.Messaging.Patterns.Extensions.Consumer;
 using PRI.Messaging.Primitives;
 
+#pragma warning disable S1104 // Fields should not have public accessibility
 namespace Tests
 {
 	[TestFixture]
@@ -19,12 +20,11 @@ namespace Tests
 		{
 			public new IMessage Handle(IMessage message)
 			{
-				IMessage messageProcessed = null;
-				EventHandler<MessageProcessedEventArgs> eventHandler = (sender, args) => { messageProcessed = args.Message; };
-				MessageProcessed += eventHandler;
-				base.Handle(message);
-				MessageProcessed -= eventHandler;
-				return messageProcessed;
+				bool wasProcessed;
+				base.Handle(message, out wasProcessed);
+				return wasProcessed
+					? message
+					: null;
 			}
 		}
 
@@ -152,3 +152,4 @@ namespace Tests
 		}
 	}
 }
+#pragma warning restore S1104 // Fields should not have public accessibility

@@ -1,3 +1,4 @@
+#if SUPPORT_ASYNC_CONSUMER
 using System;
 using System.Threading.Tasks;
 using PRI.Messaging.Primitives;
@@ -25,3 +26,4 @@ namespace PRI.Messaging.Patterns
 		}
 	}
 }
+#endif

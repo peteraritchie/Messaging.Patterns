@@ -2,18 +2,18 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel.Composition;
 using System.ComponentModel.Composition.Hosting;
+using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
 using Microsoft.Mef.CommonServiceLocator;
 using Microsoft.Practices.ServiceLocation;
 using NUnit.Framework;
-using NUnit.Framework.Compatibility;
 using PRI.ProductivityExtensions.TemporalExtensions;
 using PRI.Messaging.Patterns;
 using PRI.Messaging.Patterns.Extensions.Bus;
-using PRI.Messaging.Primitives;
 using Tests.Mocks;
 
+#pragma warning disable S1172 // Unused method parameters should be removed
 namespace Tests
 {
 	[TestFixture]
@@ -68,13 +68,15 @@ namespace Tests
 			var compositionContainer = new CompositionContainer(catalog);
 			var message2Consumer = new Message2Consumer();
 			compositionContainer.ComposeExportedValue(message2Consumer);
+#if SUPPORT_ASYNC_CONSUMER
 			var message3AsyncConsumer = new Message3AsyncConsumer();
 			compositionContainer.ComposeExportedValue(message3AsyncConsumer);
+#endif
 			compositionContainer.ComposeExportedValue(new Pipe());
 			compositionContainer.ComposeExportedValue(new Pipe23());
 			ServiceLocator.SetLocatorProvider(() => new MefServiceLocator(compositionContainer));
 
-			#endregion
+#endregion
 
 			bus.SetServiceLocator(ServiceLocator.Current);
 
@@ -90,6 +92,7 @@ namespace Tests
 		public void NullBusThrowsWhenSettingServiceLocator()
 		{
 			Bus bus = null;
+			// ReSharper disable once ExpressionIsAlwaysNull
 			Assert.Throws<ArgumentNullException>(()=>bus.SetServiceLocator(null));
 		}
 
@@ -105,7 +108,7 @@ namespace Tests
 		{
 			var bus = new Bus();
 
-			#region composition root
+#region composition root
 
 			var catalog = new AggregateCatalog();
 			catalog.Catalogs.Add(new AssemblyCatalog(typeof(Message2Consumer).Assembly));
@@ -113,12 +116,14 @@ namespace Tests
 			var message2Consumer = new Message2Consumer();
 			ServiceLocator.SetLocatorProvider(() => new MefServiceLocator(compositionContainer));
 
-			#endregion
+#endregion
 
 			bus.SetServiceLocator(new MefServiceLocator(compositionContainer));
 			compositionContainer.ComposeExportedValue(message2Consumer);
+#if SUPPORT_ASYNC_CONSUMER
 			var message3AsyncConsumer = new Message3AsyncConsumer();
 			compositionContainer.ComposeExportedValue(message3AsyncConsumer);
+#endif
 			compositionContainer.ComposeExportedValue(new Pipe());
 			compositionContainer.ComposeExportedValue(new Pipe23());
 			bus.SetServiceLocator(new MefServiceLocator(compositionContainer));
@@ -168,7 +173,11 @@ namespace Tests
 			var directory = Path.GetDirectoryName(new Uri(GetType().Assembly.CodeBase).LocalPath);
 			bus.AddHandlersAndTranslators(directory, "Tests*.dll", "Tests.Mocks");
 
+#if SUPPORT_ASYNC_CONSUMER
 			Assert.AreEqual(3, bus._consumerInvokers.Count);
+#else
+			Assert.AreEqual(2, bus._consumerInvokers.Count);
+#endif
 		}
 
 		[Test]
@@ -178,9 +187,13 @@ namespace Tests
 			var directory = Path.GetDirectoryName(new Uri(GetType().Assembly.CodeBase).LocalPath);
 			bus.AddHandlersAndTranslators(directory, "Tests*.dll", GetType().Namespace);
 
+			// ReSharper disable AssignNullToNotNullAttribute
+#if SUPPORT_ASYNC_CONSUMER
 			Assert.IsTrue(bus._consumerInvokers.ContainsKey(typeof(Message3).AssemblyQualifiedName));
+#endif
 			Assert.IsTrue(bus._consumerInvokers.ContainsKey(typeof(Message2).AssemblyQualifiedName));
 			Assert.IsTrue(bus._consumerInvokers.ContainsKey(typeof(Message1).AssemblyQualifiedName));
+			// ReSharper restore AssignNullToNotNullAttribute
 		}
 
 		[Test]
@@ -198,6 +211,7 @@ namespace Tests
 			Assert.AreEqual(message1.CorrelationId, Message2Consumer.LastMessageReceived.CorrelationId);
 		}
 
+#if SUPPORT_ASYNC_CONSUMER
 		[Test]
 		public async Task DiscoveredBusAsynchronousConsumerAsynchronouslyConsumesCorrectly()
 		{
@@ -225,5 +239,7 @@ namespace Tests
 			Assert.IsNotNull(Message3AsyncConsumer.LastMessageReceived);
 			Assert.AreEqual(message3.CorrelationId, Message3AsyncConsumer.LastMessageReceived.CorrelationId);
 		}
+#endif
 	}
 }
+#pragma warning restore S1172 // Unused method parameters should be removed

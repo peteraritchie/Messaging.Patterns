@@ -28,9 +28,11 @@ build_script:
 
     nuget restore
 
-    dotnet build -c Release /p:Version=$env:APPVEYOR_BUILD_VERSION /p:PackageReleaseNotes="$env:APPVEYOR_PULL_REQUEST_TITLE"
+    #dotnet build -c Release /p:Version=$env:APPVEYOR_BUILD_VERSION /p:PackageReleaseNotes="$env:APPVEYOR_PULL_REQUEST_TITLE"
 
+    pushd PRI.Messaging.Patterns
     dotnet pack -c Release /p:Version=$env:APPVEYOR_BUILD_VERSION /p:PackageReleaseNotes="$env:APPVEYOR_PULL_REQUEST_TITLE"
+    popd
 
 #    if(Test-Path .\Tools) {
 #

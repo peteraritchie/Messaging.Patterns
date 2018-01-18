@@ -1,3 +1,4 @@
+#if (NET45)
 using System;
 
 namespace PRI.Messaging.Patterns.Internal
@@ -13,3 +14,4 @@ namespace PRI.Messaging.Patterns.Internal
 
 	}
 }
+#endif

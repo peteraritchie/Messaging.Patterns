@@ -99,12 +99,6 @@
       <HintPath>..\..\packages\Microsoft.CodeAnalysis.Workspaces.Common.1.0.1\lib\portable-net45+win8\Microsoft.CodeAnalysis.Workspaces.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="PRI.Messaging.Patterns">
-      <HintPath>..\..\packages\PRI.Messaging.Patterns.1.1.51\lib\net45\PRI.Messaging.Patterns.dll</HintPath>
-    </Reference>
-    <Reference Include="PRI.Messaging.Primitives">
-      <HintPath>..\..\packages\PRI.Messaging.Primitives.2.0.13\lib\net40\PRI.Messaging.Primitives.dll</HintPath>
-    </Reference>
     <Reference Include="System.Collections.Immutable, Version=1.1.36.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
       <HintPath>..\..\packages\System.Collections.Immutable.1.1.36\lib\portable-net45+win8+wp8+wpa81\System.Collections.Immutable.dll</HintPath>
       <Private>False</Private>
@@ -133,6 +127,12 @@
       <HintPath>..\..\packages\System.Reflection.Metadata.1.0.21\lib\portable-net45+win8\System.Reflection.Metadata.dll</HintPath>
       <Private>False</Private>
     </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\PRI.Messaging.Patterns\PRI.Messaging.Patterns.csproj">
+      <Project>{d7e0f3b0-0421-43d4-ae48-3b0bed55e019}</Project>
+      <Name>PRI.Messaging.Patterns</Name>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\Portable\$(TargetFrameworkVersion)\Microsoft.Portable.CSharp.targets" />
   <Target Name="AfterBuild">

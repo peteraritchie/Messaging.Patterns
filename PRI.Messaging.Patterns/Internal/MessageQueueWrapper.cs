@@ -1,3 +1,4 @@
+#if (NET11 || NET20 || NET40 || NET45 || NET30 || NET35 || NET451 || NET452 || NET46 || NET461 || NET462)
 using System;
 using System.Messaging;
 
@@ -63,3 +64,4 @@ namespace PRI.Messaging.Patterns.Internal
 		}
 	}
 }
+#endif

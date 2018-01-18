@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using PRI.Messaging.Primitives;
 
@@ -15,7 +14,9 @@ namespace PRI.Messaging.Patterns.Exceptions
 		}
 	}
 
-	[ExcludeFromCodeCoverage/*unable to reproduce this exception in a unit test*/]
+#if (NETSTANDARD2_0 || NET40 || NET45 || NET451 || NET452 || NET46 || NET461 || NET462 || NET47 || NET471)
+	[System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage/*unable to reproduce this exception in a unit test*/]
+#endif
 	public class UnexpectedDuplicateKeyException : Exception
 	{
 		public UnexpectedDuplicateKeyException(ArgumentException argumentException, string key, IEnumerable<string> keys, string context = "<unknown>")

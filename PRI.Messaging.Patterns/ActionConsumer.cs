@@ -12,7 +12,8 @@ namespace PRI.Messaging.Patterns
 	/// </example>
 	/// </summary>
 	/// <typeparam name="T"></typeparam>
-	public class ActionConsumer<T> : IConsumer<T> where T : IMessage
+	public class ActionConsumer<T> : IConsumer<T>
+		where T : IMessage
 	{
 		private readonly Action<T> _action;
 

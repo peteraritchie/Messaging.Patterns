@@ -1,3 +1,4 @@
+#if (NET45)
 using System.Messaging;
 
 namespace PRI.Messaging.Patterns.Internal
@@ -13,3 +14,4 @@ namespace PRI.Messaging.Patterns.Internal
 		public Message Message { get {return _message;} }
 	}
 }
+#endif

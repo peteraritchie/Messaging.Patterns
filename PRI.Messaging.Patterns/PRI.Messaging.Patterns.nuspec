@@ -9,7 +9,7 @@
 		<iconUrl>https://github.com/peteraritchie/Messaging.Patterns/raw/develop/inbox.png</iconUrl>
 		<requireLicenseAcceptance>false</requireLicenseAcceptance>
 		<description>$description$</description>
-		<releaseNotes>Fixed out-of sync internal dictionaries problem.</releaseNotes>
+		<releaseNotes>Introduction of code analysis rules for Messaging Patterns.</releaseNotes>
 		<copyright>$copyright$</copyright>
 		<tags>Messaging message-oriented events</tags>
 	</metadata>

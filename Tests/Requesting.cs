@@ -9,6 +9,7 @@ using PRI.Messaging.Patterns.Extensions.Bus;
 using PRI.Messaging.Primitives;
 using Tests.Mocks;
 
+#pragma warning disable S1481 // Unused local variables should be removed
 namespace Tests
 {
 	[TestFixture]
@@ -327,3 +328,4 @@ namespace Tests
 		}
 	}
 }
+#pragma warning restore S1481 // Unused local variables should be removed

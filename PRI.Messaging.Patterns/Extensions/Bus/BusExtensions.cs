@@ -245,9 +245,9 @@ namespace PRI.Messaging.Patterns.Extensions.Bus
 		/// </summary>
 		/// <typeparam name="TMessage">The type of the message being sent</typeparam>
 		/// <typeparam name="TSuccessEvent">The type of the event for the response</typeparam>
+		/// <typeparam name="TErrorEvent">The type of the event in case of error.</typeparam>
 		/// <param name="bus">The bus to send/receive from</param>
 		/// <param name="message">The message to send</param>
-		/// <param name="cancellationToken">CancellationToken to use to cancel or timeout.</param>
 		/// <returns>The event response</returns>
 		public static Task<TSuccessEvent> RequestAsync<TMessage, TSuccessEvent, TErrorEvent>(this IBus bus, TMessage message)
 			where TMessage : IMessage
@@ -444,7 +444,7 @@ namespace JetBrains.Annotations
 
 	/// <summary>
 	/// Specify what is considered used implicitly when marked
-	/// with <see cref="MeansImplicitUseAttribute"/> or <see cref="UsedImplicitlyAttribute"/>.
+	/// with <see cref="JetBrains.Annotations.MeansImplicitUseAttribute"/> or <see cref="UsedImplicitlyAttribute"/>.
 	/// </summary>
 	[Flags]
 	internal enum ImplicitUseTargetFlags

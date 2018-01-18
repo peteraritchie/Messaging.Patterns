@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using PRI.Messaging.Primitives;
 
@@ -8,6 +9,7 @@ namespace PRI.Messaging.Patterns
 	/// Forwards message of type <typeparamref name="T"/> to zero or more consumers
 	/// </summary>
 	/// <typeparam name="T"></typeparam>
+	[Obsolete("This pattern is not correctly implemented, choose pub/sub instead.")]
 	public class Multiplexor<T> : IPipe<T, T> where T : IMessage
 	{
 		internal readonly List<IConsumer<T>> _consumers;

@@ -1,22 +1,48 @@
+#if (NET45 || NET451 || NET452 || NET46 || NET461 || NET462)
+#define SERVICE_LOCATOR_SUPPORT
+#endif
+#if (NETSTANDARD1_0 || NETSTANDARD1_1 || NETSTANDARD1_2 || NETSTANDARD1_3 || NETSTANDARD1_4 || NETSTANDARD1_5 || NETSTANDARD1_6 || NETSTANDARD20)
+#define SERVICE_LOCATOR_SUPPORT
+//#define SERVICE_PROVIDER_SUPPORT
+#endif
+
+#if (NET45 || NET451 || NET452 || NET46 || NET461 || NET462)
+using System.Diagnostics.CodeAnalysis;
+#endif
+#if SERVICE_LOCATOR_SUPPORT
+using CommonServiceLocator;
+//using Microsoft.Practices.ServiceLocation;
+#elif SERVICE_PROVIDER_SUPPORT
+using CommonServiceLocator;
+#endif
+
 using System;
 using System.Linq;
 using PRI.Messaging.Primitives;
 using PRI.ProductivityExtensions.ReflectionExtensions;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
 using System.Threading;
 using System.Threading.Tasks;
 using JetBrains.Annotations;
-using Microsoft.Practices.ServiceLocation;
+//#if (NETSTANDARD1_0 || NETSTANDARD1_1 || NETSTANDARD1_2 || NETSTANDARD1_3 || NETSTANDARD1_4 || NETSTANDARD1_5 || NETSTANDARD1_6 || NETSTANDARD20)
+using System.Reflection;
+//#endif
+#if SERVICE_PROVIDER_SUPPORT
+using Microsoft.Extensions.DependencyInjection;
+#endif
 using PRI.Messaging.Patterns.Exceptions;
 
 namespace PRI.Messaging.Patterns.Extensions.Bus
 {
 	public static class BusExtensions
 	{
-		private static readonly Dictionary<IBus, Dictionary<Type, Delegate>> busResolverDictionaries = new Dictionary<IBus, Dictionary<Type, Delegate>>();
+		private static readonly Dictionary<IBus, Dictionary<string, Delegate>> busResolverDictionaries = new Dictionary<IBus, Dictionary<string, Delegate>>();
+#if SERVICE_LOCATOR_SUPPORT
 		private static readonly Dictionary<IBus, IServiceLocator> busServiceLocators = new Dictionary<IBus, IServiceLocator>();
+#elif SERVICE_PROVIDER_SUPPORT
+		private static readonly Dictionary<IBus, IServiceProvider> busServiceProviders = new Dictionary<IBus, IServiceProvider>();
+#endif
 
 		/// <summary>
 		/// Add the ability to resolve an instance of <typeparam name="T"></typeparam>
@@ -40,11 +66,17 @@ namespace PRI.Messaging.Patterns.Extensions.Bus
 		public static void AddResolver<T>(this IBus bus, Func<T> resolver)
 		{
 			if(!busResolverDictionaries.ContainsKey(bus))
-				busResolverDictionaries.Add(bus, new Dictionary<Type, Delegate>());
+				busResolverDictionaries.Add(bus, new Dictionary<string, Delegate>());
 			var dictionary = busResolverDictionaries[bus];
-			dictionary[typeof (T)] = resolver;
+#if (NETSTANDARD1_0 || NETSTANDARD1_1 || NETSTANDARD1_2 || NETSTANDARD1_3 || NETSTANDARD1_4 || NETSTANDARD1_5 || NETSTANDARD1_6)
+			var key = typeof (T).AssemblyQualifiedName ?? typeof(T).GetTypeInfo().GUID.ToString();
+#else
+			var key = typeof (T).AssemblyQualifiedName ?? typeof(T).GUID.ToString();
+#endif
+			dictionary[key] = resolver;
 		}
 
+#if SERVICE_LOCATOR_SUPPORT
 		public static void SetServiceLocator(this IBus bus, IServiceLocator serviceLocator)
 		{
 			if (bus == null)
@@ -67,13 +99,41 @@ namespace PRI.Messaging.Patterns.Extensions.Bus
 				return Activator.CreateInstance(serviceType);
 			}
 
+#if !(NETSTANDARD1_0 || NETSTANDARD1_1 || NETSTANDARD1_2 || NETSTANDARD1_3 || NETSTANDARD1_4 || NETSTANDARD1_5 || NETSTANDARD1_6)
 			[ExcludeFromCodeCoverage]
+#endif
 			protected override IEnumerable<object> DoGetAllInstances(Type serviceType)
 			{
 				throw new NotImplementedException();
 			}
 		}
+#elif SERVICE_PROVIDER_SUPPORT
+		public static void SetServiceProvider(this IBus bus, IServiceProvider serviceProvider)
+		{
+			if (bus == null)
+				throw new ArgumentNullException(nameof(bus));
+			if (serviceProvider == null)
+				throw new ArgumentNullException(nameof(serviceProvider));
+			if (!busServiceProviders.ContainsKey(bus))
+				busServiceProviders.Add(bus, serviceProvider);
+			else
+				busServiceProviders[bus] = serviceProvider;
+		}
 
+		/// <summary>
+		/// A private class to handle Activator creations as a service locator type
+		/// </summary>
+		private class ActivatorServiceProvider : IServiceProvider
+		{
+			public object GetService(Type serviceType)
+			{
+				return Activator.CreateInstance(serviceType);
+			}
+		}
+#endif
+
+		// NETSTANDARD1_3 || NETSTANDARD1_4 || 
+#if (NETSTANDARD1_3 || NETSTANDARD1_4 || NETSTANDARD1_5 || NETSTANDARD1_6 || NETSTANDARD20 || NET40 || NET45 || NET451 || NET452 || NET46 || NET461 || NET462 || NET47)
 		/// <summary>
 		/// Dynamically load message handlers by filename in a specific directory.
 		/// </summary>
@@ -90,59 +150,121 @@ namespace PRI.Messaging.Patterns.Extensions.Bus
 		/// <param name="namespace">Include IConsumers{TMessage} within this namespace</param>
 		public static void AddHandlersAndTranslators(this IBus bus, string directory, string wildcard, string @namespace)
 		{
-			if (!busResolverDictionaries.ContainsKey(bus))
-				busResolverDictionaries.Add(bus, new Dictionary<Type, Delegate>());
-			IServiceLocator serviceLocator = busServiceLocators.ContainsKey(bus) ? busServiceLocators[bus] : new ActivatorServiceLocator();
+			IEnumerable<Type> consumerTypes = typeof(IConsumer<>)./*GetTypeInfo().*/ByImplementedInterfaceInDirectory(directory, wildcard, @namespace);
+			AddHandlersAndTranslators(bus, consumerTypes);
+		}
+#endif
 
-			IEnumerable<Type> consumerTypes = typeof(IConsumer<>).ByImplementedInterfaceInDirectory(directory, wildcard, @namespace);
+		/// <summary>
+		/// Dynamically load message handlers from a collection of types.
+		/// </summary>
+		/// <param name="bus">The <seealso cref="IBus"/> instance this will apply to</param>
+		/// <param name="consumerTypes">Types to test for being a handler and load if so.</param>
+		public static void AddHandlersAndTranslators(this IBus bus, IEnumerable<Type> consumerTypes)
+		{
+			if (!busResolverDictionaries.ContainsKey(bus))
+				busResolverDictionaries.Add(bus, new Dictionary<string, Delegate>());
+#if SERVICE_LOCATOR_SUPPORT
+			IServiceLocator serviceLocator = busServiceLocators.ContainsKey(bus)
+				? busServiceLocators[bus]
+				: new ActivatorServiceLocator();
+#elif SERVICE_PROVIDER_SUPPORT
+			IServiceProvider serviceProvider = busServiceProviders.ContainsKey(bus)
+				? busServiceProviders[bus]
+				: new ActivatorServiceProvider();
+#endif
+
 			foreach (var consumerType in consumerTypes)
 			{
+#if (NETSTANDARD1_0 || NETSTANDARD1_1 || NETSTANDARD1_2 || NETSTANDARD1_3 || NETSTANDARD1_4 || NETSTANDARD1_5 || NETSTANDARD1_6)
+				var consumerTypeInterfaces = consumerType.GetTypeInfo().ImplementedInterfaces;
 				var pipeImplementationInterface =
-					consumerType.GetInterfaces()
-						.FirstOrDefault(t => t.IsGenericType && !t.IsGenericTypeDefinition && t.GetGenericTypeDefinition() == typeof (IPipe<,>));
+					consumerTypeInterfaces
+						.FirstOrDefault(t => t.GetTypeInfo().IsGenericType && !t.GetTypeInfo().IsGenericTypeDefinition &&
+						                     t.GetGenericTypeDefinition() == typeof(IPipe<,>));
+#else
+				var consumerTypeInterfaces = consumerType.GetInterfaces();
+				var pipeImplementationInterface =
+					consumerTypeInterfaces
+						.FirstOrDefault(t => t.IsGenericType && !t.IsGenericTypeDefinition &&
+						                     t.GetGenericTypeDefinition() == typeof(IPipe<,>));
+#endif
 
 				if (pipeImplementationInterface != null)
 				{
 					var translatorType = consumerType;
 					var messageTypes = pipeImplementationInterface.GetGenericTypeArguments();
-
+#if (NETSTANDARD1_0 || NETSTANDARD1_1 || NETSTANDARD1_2 || NETSTANDARD1_3 || NETSTANDARD1_4 || NETSTANDARD1_5 || NETSTANDARD1_6)
+					var key = translatorType.AssemblyQualifiedName ?? translatorType.GetTypeInfo().GUID.ToString();
+#else
+					var key = translatorType.AssemblyQualifiedName ?? translatorType.GUID.ToString();
+#endif
 					// get instance of pipe
-					var translatorInstance = busResolverDictionaries[bus].ContainsKey(translatorType)
-						? InvokeFunc(busResolverDictionaries[bus][translatorType])
+					var translatorInstance = busResolverDictionaries[bus].ContainsKey(key)
+						? InvokeFunc(busResolverDictionaries[bus][key])
+#if SERVICE_LOCATOR_SUPPORT
 						: serviceLocator.GetInstance(translatorType);
-
+#elif SERVICE_PROVIDER_SUPPORT
+						: serviceProvider.GetService(translatorType);
+#else
+						: null;
+#endif
 					// get instance of the helper that will help add specific handler
 					// code to the bus.
-					var helperType1 = typeof (PipeAttachConsumerHelper<,>).MakeGenericType(messageTypes);
+					var helperType1 = typeof(PipeAttachConsumerHelper<,>).MakeGenericType(messageTypes);
 					var helperType1Instance = Activator.CreateInstance(helperType1);
+#if (NETSTANDARD1_0 || NETSTANDARD1_1 || NETSTANDARD1_2 || NETSTANDARD1_3 || NETSTANDARD1_4 || NETSTANDARD1_5 || NETSTANDARD1_6)
+					var attachConsumerMethodInfo = helperType1.GetTypeInfo().GetDeclaredMethod("AttachConsumer");
+#else
 					var attachConsumerMethodInfo = helperType1.GetMethod("AttachConsumer");
+#endif
 					attachConsumerMethodInfo.Invoke(helperType1Instance, new[] {translatorInstance, bus});
 
 					var inType = messageTypes[0];
-					var helperType = typeof (BusAddhHandlerHelper<>).MakeGenericType(inType);
+					var helperType = typeof(BusAddHandlerHelper<>).MakeGenericType(inType);
 					var helperInstance = Activator.CreateInstance(helperType);
+#if (NETSTANDARD1_0 || NETSTANDARD1_1 || NETSTANDARD1_2 || NETSTANDARD1_3 || NETSTANDARD1_4 || NETSTANDARD1_5 || NETSTANDARD1_6)
+					var addHandlerMethodInfo = helperType.GetTypeInfo().GetDeclaredMethod("AddHandler");
+#else
 					var addHandlerMethodInfo = helperType.GetMethod("AddHandler");
+#endif
 
 					addHandlerMethodInfo.Invoke(helperInstance, new[] {bus, translatorInstance});
 				}
 				else
 				{
 					var consumerImplementationInterface =
-						consumerType.GetInterfaces()
-							.FirstOrDefault(t => t.IsGenericType && !t.IsGenericTypeDefinition && t.GetGenericTypeDefinition() == typeof (IConsumer<>));
+						consumerTypeInterfaces
+#if (NETSTANDARD1_0 || NETSTANDARD1_1 || NETSTANDARD1_2 || NETSTANDARD1_3 || NETSTANDARD1_4 || NETSTANDARD1_5 || NETSTANDARD1_6)
+						.FirstOrDefault(t => t.GetTypeInfo().IsGenericType && !t.GetTypeInfo().IsGenericTypeDefinition && t.GetGenericTypeDefinition() == typeof (IConsumer<>));
+#else
+							.FirstOrDefault(t => t.IsGenericType && !t.IsGenericTypeDefinition &&
+							                     t.GetGenericTypeDefinition() == typeof(IConsumer<>));
+#endif
 					Debug.Assert(consumerImplementationInterface != null,
 						"Unexpected state enumerating implementations of IConsumer<T>");
 
 					var messageTypes = consumerImplementationInterface.GetGenericTypeArguments();
 
-					var helperType = typeof (BusAddhHandlerHelper<>).MakeGenericType(messageTypes);
+					var helperType = typeof(BusAddHandlerHelper<>).MakeGenericType(messageTypes);
 					var helperInstance = Activator.CreateInstance(helperType);
+#if (NETSTANDARD1_0 || NETSTANDARD1_1 || NETSTANDARD1_2 || NETSTANDARD1_3 || NETSTANDARD1_4 || NETSTANDARD1_5 || NETSTANDARD1_6)
+					var addHandlerMethodInfo = helperType.GetTypeInfo().GetDeclaredMethod("AddHandler");
+					var key = consumerType.AssemblyQualifiedName ?? consumerType.GetTypeInfo().GUID.ToString();
+#else
 					var addHandlerMethodInfo = helperType.GetMethod("AddHandler");
+					var key = consumerType.AssemblyQualifiedName ?? consumerType.GUID.ToString();
+#endif
 
-					var handlerInstance = busResolverDictionaries[bus].ContainsKey(consumerType)
-						? InvokeFunc(busResolverDictionaries[bus][consumerType])
+					var handlerInstance = busResolverDictionaries[bus].ContainsKey(key)
+						? InvokeFunc(busResolverDictionaries[bus][key])
+#if SERVICE_LOCATOR_SUPPORT
 						: serviceLocator.GetInstance(consumerType);
-
+#elif SERVICE_PROVIDER_SUPPORT
+						: serviceProvider.GetService(consumerType);
+#else
+						: null;
+#endif
 					addHandlerMethodInfo.Invoke(helperInstance, new[] {bus, handlerInstance});
 				}
 			}
@@ -381,10 +503,14 @@ namespace PRI.Messaging.Patterns.Extensions.Bus
 		/// <returns>Whatever <paramref name="func"/> returns</returns>
 		private static object InvokeFunc(Delegate func)
 		{
+#if (NETSTANDARD1_0 || NETSTANDARD1_1 || NETSTANDARD1_2 || NETSTANDARD1_3 || NETSTANDARD1_4 || NETSTANDARD1_5 || NETSTANDARD1_6)
+			return func.GetMethodInfo().Invoke(func.Target, null);
+#else
 			return func.Method.Invoke(func.Target, null);
+#endif
 		}
 
-		private class BusAddhHandlerHelper<TMessage> where TMessage : IMessage
+		private class BusAddHandlerHelper<TMessage> where TMessage : IMessage
 		{
 			[UsedImplicitly]
 			public void AddHandler(IBus bus, IConsumer<TMessage> consumer)
@@ -404,6 +530,107 @@ namespace PRI.Messaging.Patterns.Extensions.Bus
 			}
 		}
 	}
+
+//	public static class X
+//	{
+//		public static IEnumerable<Type> ByImplementedInterfaceInDirectory(this Type interfaceType, string directory, string wildcard, string namespaceName)
+//		{
+//			if (interfaceType == null) throw new ArgumentNullException(nameof(interfaceType));
+//			if (directory == null) throw new ArgumentNullException(nameof(directory));
+//			if (wildcard == null) throw new ArgumentNullException(nameof(wildcard));
+//			if (namespaceName == null) throw new ArgumentNullException(nameof(namespaceName));
+//			if (!interfaceType.GetTypeInfo().IsInterface)
+//			{
+//				throw new ArgumentException("Type is not an interface", nameof(interfaceType));
+//			}
+
+//			return ByPredicate(
+//					System.IO.Directory.GetFiles(directory, wildcard).ToAssemblies(),
+//					type => (type.Namespace ?? string.Empty).StartsWith(namespaceName) && type.ImplementsInterface(interfaceType))
+//				.Select(t => t.AsType());
+//		}
+
+//		public static bool ImplementsInterface(this TypeInfo typeTypeInfo, TypeInfo interfaceTypeInfo)
+//		{
+//			if (interfaceTypeInfo == null) throw new ArgumentNullException(nameof(interfaceTypeInfo));
+//			if (typeTypeInfo == null) throw new ArgumentNullException(nameof(typeTypeInfo));
+
+//			var interfaceType = interfaceTypeInfo.AsType();
+//			if (interfaceTypeInfo.IsGenericType && interfaceTypeInfo.ContainsGenericParameters)
+//			{
+//				return interfaceTypeInfo.ImplementedInterfaces
+//					.Select(t => t.GetTypeInfo())
+//					.Any(t => t.IsGenericType && t.GetGenericTypeDefinition() == interfaceType);
+//			}
+//			return interfaceTypeInfo.IsAssignableFrom(typeTypeInfo);
+//		}
+//		public static bool ImplementsInterface(this TypeInfo typeTypeInfo, Type interfaceType)
+//		{
+//			if (interfaceType == null) throw new ArgumentNullException(nameof(interfaceType));
+//			if (typeTypeInfo == null) throw new ArgumentNullException(nameof(typeTypeInfo));
+
+//			var interfaceTypeInfo = interfaceType.GetTypeInfo();
+//			if (interfaceTypeInfo.IsGenericType && interfaceTypeInfo.ContainsGenericParameters)
+//			{
+//				return typeTypeInfo.Im.ImplementedInterfaces
+//					.Select(t => t.GetTypeInfo())
+//					.Any(t => t.IsGenericType && t.GetGenericTypeDefinition() == interfaceType);
+//			}
+//			return interfaceTypeInfo.IsAssignableFrom(typeTypeInfo);
+//		}
+
+//		private static IEnumerable<TypeInfo> ByPredicate(IEnumerable<Assembly> assemblies, Predicate<TypeInfo> predicate)
+//		{
+//			var assemblyTypes = from assembly in assemblies
+//				from type in assembly.DefinedTypes
+//				select type;
+//			var nonAbstractClasses = from type in assemblyTypes
+//				where !type.IsAbstract && type.IsClass
+//				select type;
+//			var types = from type in nonAbstractClasses
+//				where predicate(type)
+//				select type;
+//			return types;
+//		}
+
+//		public static IEnumerable<Assembly> ToAssemblies(this IEnumerable<string> filenames)
+//#pragma warning restore CS1591 // Missing XML comment for publicly visible type or member 'IEnumerableable.ToAssemblies(IEnumerable<string>)'
+//		{
+//			foreach (var f in filenames)
+//			{
+//				Assembly loadFrom;
+//#if (NETSTANDARD1_3 || NETSTANDARD1_4 || NETSTANDARD1_5 || NETSTANDARD1_6 || NETCOREAPP1_0 || NETCOREAPP1_1)
+//				var dir = System.IO.Directory.GetCurrentDirectory();
+//#endif
+//				try
+//				{
+//#if (NETSTANDARD1_3 || NETSTANDARD1_4 || NETSTANDARD1_5 || NETSTANDARD1_6 || NETCOREAPP1_0 || NETCOREAPP1_1)
+//					System.IO.Directory.SetCurrentDirectory(System.IO.Path.GetDirectoryName(f));
+//					loadFrom = Assembly.Load(new AssemblyName(System.IO.Path.GetFileNameWithoutExtension(f)));
+//#elif (!NETSTANDARD1_0 && !NETSTANDARD1_1 && !NETSTANDARD1_2)
+//					loadFrom = Assembly.LoadFrom(f);
+//#endif
+//				}
+//				catch (BadImageFormatException)
+//				{
+//					// ignore anything that can't be loaded
+//					continue;
+//				}
+//				catch (ReflectionTypeLoadException)
+//				{
+//					// ignore anything that can't be loaded
+//					continue;
+//				}
+//#if (NETSTANDARD1_3 || NETSTANDARD1_4 || NETSTANDARD1_5 || NETSTANDARD1_6 || NETCOREAPP1_0 || NETCOREAPP1_1)
+//				finally
+//				{
+//					System.IO.Directory.SetCurrentDirectory(dir);
+//				}
+//#endif
+//				yield return loadFrom;
+//			}
+//		}
+//	}
 }
 
 namespace JetBrains.Annotations
@@ -413,7 +640,9 @@ namespace JetBrains.Annotations
 	/// so this symbol will not be marked as unused (as well as by other usage inspections).
 	/// </summary>
 	[AttributeUsage(AttributeTargets.All)]
+#if NET45
 	[ExcludeFromCodeCoverage]
+#endif
 	internal sealed class UsedImplicitlyAttribute : Attribute
 	{
 		public UsedImplicitlyAttribute()
@@ -473,4 +702,50 @@ namespace JetBrains.Annotations
 		/// <summary>Indicates implicit instantiation of a type.</summary>
 		InstantiatedNoFixedConstructorSignature = 8,
 	}
+
+#if false
+	public static class X
+	{
+#if (NETSTANDARD1_0 || NETSTANDARD1_1 || NETSTANDARD1_2 || NETSTANDARD1_3 || NETSTANDARD1_4 || NETSTANDARD1_5 || NETSTANDARD1_6)
+		public static bool ImplementsInterface(this TypeInfo type, Type interfaceType)
+		{
+			if (interfaceType == null) throw new ArgumentNullException(nameof(interfaceType));
+			if (type == null) throw new ArgumentNullException(nameof(type));
+			var typeInfo = interfaceType.GetTypeInfo();
+			if (typeInfo.IsGenericType && typeInfo.ContainsGenericParameters)
+			{
+				return type.ImplementedInterfaces.Any(t => t.GetTypeInfo().IsGenericType && t.GetTypeInfo().GetGenericTypeDefinition() == interfaceType);
+			}
+			return typeInfo.IsAssignableFrom(type);
+		}
+#endif
+		public static IEnumerable<Type> ByImplementedInterfaceInDirectory(this Type interfaceType, string directory, string wildcard, string namespaceName)
+		{
+#if (NETSTANDARD1_0 || NETSTANDARD1_1 || NETSTANDARD1_2 || NETSTANDARD1_3 || NETSTANDARD1_4 || NETSTANDARD1_5 || NETSTANDARD1_6)
+			if (!interfaceType.GetTypeInfo().IsInterface)
+#else
+			if (!interfaceType.IsInterface)
+#endif
+			{
+				throw new ArgumentException("Type is not an interface", "TInterface");
+			}
+
+			return ByPredicate(
+				System.IO.Directory.GetFiles(directory, wildcard).ToAssemblies(),
+				type => (type.Namespace ?? string.Empty).StartsWith(namespaceName) && type.ImplementsInterface(interfaceType));
+		}
+
+		private static IEnumerable<TypeInfo> ByPredicate(IEnumerable<Assembly> assemblies, Predicate<TypeInfo> predicate)
+		{
+			return from assembly in assemblies
+#if (NETSTANDARD1_0 || NETSTANDARD1_1 || NETSTANDARD1_2 || NETSTANDARD1_3 || NETSTANDARD1_4)
+				from type in assembly.DefinedTypes
+#else
+				   from type in assembly.GetTypes()
+#endif
+				where !type.IsAbstract && type.IsClass && predicate(type)
+				select type;
+		}
+	}
+#endif
 }

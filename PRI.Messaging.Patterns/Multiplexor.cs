@@ -36,7 +36,14 @@ namespace PRI.Messaging.Patterns
 
 		public void Handle(T message)
 		{
+#if (NETSTANDARD1_0 || NETSTANDARD1_1 || NETSTANDARD1_2)
+			foreach(var x in _consumers)
+			{
+				x.Handle(message);
+			}
+#else
 			_consumers.ForEach(x => x.Handle(message));
+#endif
 		}
 	}
 }

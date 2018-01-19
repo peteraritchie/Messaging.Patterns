@@ -32,7 +32,7 @@ build_script:
 
     pushd PRI.Messaging.Patterns
 
-    dotnet pack -c Release /p:Version=$env:APPVEYOR_BUILD_VERSION /p:PackageReleaseNotes="$env:APPVEYOR_PULL_REQUEST_TITLE"
+    dotnet pack -c Release /p:Version=$env:APPVEYOR_BUILD_VERSION /p:PackageReleaseNotes="$env:APPVEYOR_PULL_REQUEST_TITLE" --include-symbols
 
     popd
 

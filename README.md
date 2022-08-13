@@ -1,5 +1,10 @@
 Messaging.Patterns
 ==================
+
+| ****************************************** NOTE ****************************************** |
+|-|
+Messaging.Primitives and Messaging.Patterns have been merged into a single repo at <https://github.com/peteraritchie/Messaging>
+
 [![Build status](https://ci.appveyor.com/api/projects/status/gdkvga7qylhs8jue?svg=true)](https://ci.appveyor.com/project/peteraritchie/messaging-patterns) [![NuGet](https://img.shields.io/nuget/v/Nuget.Core.svg?maxAge=2592000)](https://www.nuget.org/packages/PRI.Messaging.Patterns/)
 
 Messaging.Patterns is a library that contains patterns for implementing message-oriented systems.  The patterns are implemetations from [Messaging.Primitives](https://github.com/peteraritchie/Messaging.Primitives)
